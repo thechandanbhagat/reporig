@@ -1,0 +1,119 @@
+{
+  "name": "reporig",
+  "displayName": "RepoRig",
+  "description": "Rig up your repository configurations with ease - manage git settings, detect repositories, and edit configurations directly in VS Code",
+  "version": "0.0.1",
+  "publisher": "reporig-dev",
+  "engines": {
+    "vscode": "^1.104.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "reporig.checkGitRepo",
+        "title": "RepoRig: Check Git Repository Status"
+      },
+      {
+        "command": "reporig.listConfigs",
+        "title": "RepoRig: List Git Configurations"
+      },
+      {
+        "command": "reporig.editConfig",
+        "title": "RepoRig: Edit Git Configuration"
+      },
+      {
+        "command": "reporig.showConfigPanel",
+        "title": "RepoRig: Open Configuration Panel"
+      },
+      {
+        "command": "reporig.openWebview",
+        "title": "RepoRig: Open UI Panel"
+      },
+      {
+        "command": "reporig.focusWebview",
+        "title": "RepoRig: Focus Webview Panel"
+      },
+      {
+        "command": "reporig.openMainView",
+        "title": "RepoRig: Open in Main Editor"
+      }
+    ],
+    "views": {
+      "reporig": [
+        {
+          "type": "webview",
+          "id": "reporig.webview",
+          "name": "Git Configuration Manager",
+          "when": "workspaceFolderCount > 0",
+          "icon": "$(list-unordered)"
+        }
+      ],
+      "scm": [
+        {
+          "id": "reporig.gitConfig",
+          "name": "Git Configuration",
+          "when": "reporig.isGitRepository",
+          "icon": "$(gear)"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "reporig",
+          "title": "RepoRig",
+          "icon": "$(gear)"
+        }
+      ]
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "reporig.checkGitRepo",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "reporig.listConfigs",
+          "when": "reporig.isGitRepository"
+        },
+        {
+          "command": "reporig.editConfig",
+          "when": "reporig.isGitRepository"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.104.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@typescript-eslint/eslint-plugin": "^8.42.0",
+    "@typescript-eslint/parser": "^8.42.0",
+    "eslint": "^9.34.0",
+    "typescript": "^5.9.2",
+    "ts-loader": "^9.5.4",
+    "webpack": "^5.101.3",
+    "webpack-cli": "^6.0.1",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}
