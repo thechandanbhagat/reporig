@@ -5,6 +5,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { RepoRigWebviewProvider } from './webviewProvider';
 import { RepoRigMainWebviewProvider } from './mainWebviewProvider';
+import { GitHooksProvider, GitHooksManager, GitHook, HookTemplate } from './gitHooksManager';
 
 const execAsync = promisify(exec);
 
@@ -102,8 +103,228 @@ export async function activate(context: vscode.ExtensionContext) {
 		showCollapseAll: true
 	});
 
+	// Initialize git hooks provider
+	let gitHooksProvider: GitHooksProvider | null = null;
+	const workspaceRoot = await getWorkspaceRoot();
+	if (workspaceRoot) {
+		gitHooksProvider = new GitHooksProvider(workspaceRoot);
+		vscode.window.createTreeView('reporig.gitHooks', {
+			treeDataProvider: gitHooksProvider,
+			showCollapseAll: true
+		});
+	}
+
 	// Check if workspace has git repository on startup
 	await checkAndSetGitContext();
+
+	// Git Hooks Commands
+	const listHooksCommand = vscode.commands.registerCommand('reporig.listHooks', async () => {
+		const workspaceRoot = await getWorkspaceRoot();
+		if (!workspaceRoot) {
+			vscode.window.showErrorMessage('No workspace folder is open');
+			return;
+		}
+
+		const isGitRepo = await isGitRepository(workspaceRoot);
+		if (!isGitRepo) {
+			vscode.window.showErrorMessage('Current workspace is not a git repository');
+			return;
+		}
+
+		if (gitHooksProvider) {
+			gitHooksProvider.refresh();
+			vscode.commands.executeCommand('reporig.gitHooks.focus');
+		}
+	});
+
+	const viewHookCommand = vscode.commands.registerCommand('reporig.viewHook', async (hook: GitHook) => {
+		if (!hook.exists) {
+			const action = await vscode.window.showInformationMessage(
+				`Hook '${hook.name}' is not configured. Would you like to create it?`,
+				'Create Hook', 'Cancel'
+			);
+			if (action === 'Create Hook') {
+				vscode.commands.executeCommand('reporig.createHook', hook.name);
+			}
+			return;
+		}
+
+		// Open hook content in a new editor
+		const doc = await vscode.workspace.openTextDocument({
+			content: hook.content || '',
+			language: 'shellscript'
+		});
+		await vscode.window.showTextDocument(doc);
+	});
+
+	const createHookCommand = vscode.commands.registerCommand('reporig.createHook', async (hookName?: string) => {
+		const workspaceRoot = await getWorkspaceRoot();
+		if (!workspaceRoot) {
+			vscode.window.showErrorMessage('No workspace folder is open');
+			return;
+		}
+
+		if (!gitHooksProvider) {
+			vscode.window.showErrorMessage('Git hooks provider not initialized');
+			return;
+		}
+
+		const hooksManager = gitHooksProvider.getHooksManager();
+		if (!hooksManager) {
+			vscode.window.showErrorMessage('Git hooks manager not available');
+			return;
+		}
+
+		// If hook name not provided, ask user to select
+		if (!hookName) {
+			const hooks = await hooksManager.getAllHooks();
+			const availableHooks = hooks.filter(h => !h.exists).map(h => h.name);
+			
+			if (availableHooks.length === 0) {
+				vscode.window.showInformationMessage('All hooks are already configured');
+				return;
+			}
+
+			hookName = await vscode.window.showQuickPick(availableHooks, {
+				placeHolder: 'Select a hook to create'
+			});
+
+			if (!hookName) {
+				return;
+			}
+		}
+
+		// Show template options
+		const templates = hooksManager.getHookTemplates();
+		const templateOptions = [
+			'Empty Hook',
+			...templates.map(t => `${t.name} - ${t.description}`)
+		];
+
+		const selectedTemplate = await vscode.window.showQuickPick(templateOptions, {
+			placeHolder: 'Choose a template for the hook'
+		});
+
+		if (!selectedTemplate) {
+			return;
+		}
+
+		let content = '#!/bin/sh\n\n# Add your hook logic here\nexit 0\n';
+		
+		if (selectedTemplate !== 'Empty Hook') {
+			const templateName = selectedTemplate.split(' - ')[0];
+			const template = templates.find(t => t.name === templateName);
+			if (template) {
+				content = template.content;
+			}
+		}
+
+		try {
+			await hooksManager.createOrUpdateHook(hookName, content);
+			vscode.window.showInformationMessage(`✅ Created hook: ${hookName}`);
+			gitHooksProvider.refresh();
+
+			// Open the created hook for editing
+			const hook = await hooksManager.getHook(hookName);
+			if (hook && hook.exists) {
+				vscode.commands.executeCommand('reporig.editHook', hook);
+			}
+		} catch (error) {
+			vscode.window.showErrorMessage(`❌ Failed to create hook: ${error}`);
+		}
+	});
+
+	const editHookCommand = vscode.commands.registerCommand('reporig.editHook', async (hook: GitHook) => {
+		if (!hook.exists) {
+			vscode.window.showErrorMessage('Hook does not exist');
+			return;
+		}
+
+		// Create a temporary document with the hook content
+		const doc = await vscode.workspace.openTextDocument({
+			content: hook.content || '',
+			language: 'shellscript'
+		});
+
+		const editor = await vscode.window.showTextDocument(doc);
+		
+		// Save the hook when the document is saved
+		const disposable = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
+			if (savedDoc === doc) {
+				const workspaceRoot = await getWorkspaceRoot();
+				if (workspaceRoot && gitHooksProvider) {
+					const hooksManager = gitHooksProvider.getHooksManager();
+					if (hooksManager) {
+						try {
+							await hooksManager.createOrUpdateHook(hook.name, savedDoc.getText());
+							vscode.window.showInformationMessage(`✅ Updated hook: ${hook.name}`);
+							gitHooksProvider.refresh();
+						} catch (error) {
+							vscode.window.showErrorMessage(`❌ Failed to save hook: ${error}`);
+						}
+					}
+				}
+				disposable.dispose();
+			}
+		});
+	});
+
+	const deleteHookCommand = vscode.commands.registerCommand('reporig.deleteHook', async (hook: GitHook) => {
+		if (!hook.exists) {
+			vscode.window.showWarningMessage('Hook does not exist');
+			return;
+		}
+
+		const confirmation = await vscode.window.showWarningMessage(
+			`Are you sure you want to delete the '${hook.name}' hook?`,
+			{ modal: true },
+			'Delete Hook'
+		);
+
+		if (confirmation === 'Delete Hook') {
+			const workspaceRoot = await getWorkspaceRoot();
+			if (workspaceRoot && gitHooksProvider) {
+				const hooksManager = gitHooksProvider.getHooksManager();
+				if (hooksManager) {
+					try {
+						await hooksManager.deleteHook(hook.name);
+						vscode.window.showInformationMessage(`✅ Deleted hook: ${hook.name}`);
+						gitHooksProvider.refresh();
+					} catch (error) {
+						vscode.window.showErrorMessage(`❌ Failed to delete hook: ${error}`);
+					}
+				}
+			}
+		}
+	});
+
+	const toggleHookCommand = vscode.commands.registerCommand('reporig.toggleHook', async (hook: GitHook) => {
+		if (!hook.exists) {
+			vscode.window.showWarningMessage('Hook does not exist');
+			return;
+		}
+
+		const workspaceRoot = await getWorkspaceRoot();
+		if (workspaceRoot && gitHooksProvider) {
+			const hooksManager = gitHooksProvider.getHooksManager();
+			if (hooksManager) {
+				try {
+					await hooksManager.toggleHookExecutable(hook.name);
+					const newStatus = hook.executable ? 'disabled' : 'enabled';
+					vscode.window.showInformationMessage(`✅ Hook '${hook.name}' ${newStatus}`);
+					gitHooksProvider.refresh();
+				} catch (error) {
+					vscode.window.showErrorMessage(`❌ Failed to toggle hook: ${error}`);
+				}
+			}
+		}
+	});
+
+	const refreshHooksCommand = vscode.commands.registerCommand('reporig.refreshHooks', () => {
+		if (gitHooksProvider) {
+			gitHooksProvider.refresh();
+		}
+	});
 
 	// Register commands
 	const checkGitRepoCommand = vscode.commands.registerCommand('reporig.checkGitRepo', async () => {
@@ -262,9 +483,13 @@ export async function activate(context: vscode.ExtensionContext) {
 	const workspaceFoldersChangeListener = vscode.workspace.onDidChangeWorkspaceFolders(async () => {
 		await checkAndSetGitContext();
 		gitConfigProvider.refresh();
+		if (gitHooksProvider) {
+			gitHooksProvider.refresh();
+		}
 	});
 
 	context.subscriptions.push(
+		// Git Config Commands
 		checkGitRepoCommand,
 		listConfigsCommand,
 		editConfigCommand,
@@ -272,11 +497,23 @@ export async function activate(context: vscode.ExtensionContext) {
 		openWebviewCommand,
 		focusWebviewCommand,
 		openMainViewCommand,
+		// Git Hooks Commands
+		listHooksCommand,
+		viewHookCommand,
+		createHookCommand,
+		editHookCommand,
+		deleteHookCommand,
+		toggleHookCommand,
+		refreshHooksCommand,
+		// Event Listeners
 		workspaceFoldersChangeListener
 	);
 
 	// Initial load of configurations
 	gitConfigProvider.refresh();
+	if (gitHooksProvider) {
+		gitHooksProvider.refresh();
+	}
 }
 
 async function getWorkspaceRoot(): Promise<string | undefined> {
