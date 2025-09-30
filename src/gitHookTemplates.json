@@ -1,0 +1,198 @@
+{
+  "templates": [
+    {
+      "name": "pre-commit",
+      "displayName": "Pre-commit Hook",
+      "description": "Runs before each commit to validate code quality",
+      "examples": [
+        {
+          "name": "ESLint Code Quality Check",
+          "description": "Runs ESLint to check JavaScript/TypeScript code quality before commit",
+          "content": "#!/bin/sh\n# Pre-commit hook to run ESLint\n\necho \"Running ESLint...\"\n\n# Get list of staged JavaScript/TypeScript files\nSTAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\\.(js|jsx|ts|tsx)$')\n\nif [ -z \"$STAGED_FILES\" ]; then\n  echo \"No JavaScript/TypeScript files to check.\"\n  exit 0\nfi\n\n# Run ESLint on staged files\necho \"$STAGED_FILES\" | xargs npx eslint\n\nif [ $? -ne 0 ]; then\n  echo \"❌ ESLint failed. Please fix the errors before committing.\"\n  exit 1\nfi\n\necho \"✅ ESLint passed!\"\nexit 0"
+        },
+        {
+          "name": "Prettier Code Formatting",
+          "description": "Automatically formats staged files with Prettier before commit",
+          "content": "#!/bin/sh\n# Pre-commit hook to run Prettier formatting\n\necho \"Running Prettier...\"\n\n# Get list of staged files that Prettier can format\nSTAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\\.(js|jsx|ts|tsx|json|css|scss|md)$')\n\nif [ -z \"$STAGED_FILES\" ]; then\n  echo \"No files to format.\"\n  exit 0\nfi\n\n# Format files with Prettier\necho \"$STAGED_FILES\" | xargs npx prettier --write\n\n# Add formatted files back to staging\necho \"$STAGED_FILES\" | xargs git add\n\necho \"✅ Files formatted with Prettier!\"\nexit 0"
+        },
+        {
+          "name": "Unit Tests Check",
+          "description": "Runs unit tests before allowing commit",
+          "content": "#!/bin/sh\n# Pre-commit hook to run unit tests\n\necho \"Running unit tests...\"\n\n# Run tests (adjust command based on your test runner)\nnpm test\n\nif [ $? -ne 0 ]; then\n  echo \"❌ Tests failed. Please fix failing tests before committing.\"\n  exit 1\nfi\n\necho \"✅ All tests passed!\"\nexit 0"
+        },
+        {
+          "name": "File Size Check",
+          "description": "Prevents committing files that are too large",
+          "content": "#!/bin/sh\n# Pre-commit hook to check file sizes\n\nmax_size=5242880  # 5MB in bytes\nlarge_files=\"\"\n\necho \"Checking file sizes...\"\n\n# Check staged files\nfor file in $(git diff --cached --name-only --diff-filter=ACM); do\n    if [ -f \"$file\" ]; then\n        file_size=$(wc -c < \"$file\")\n        if [ $file_size -gt $max_size ]; then\n            large_files=\"$large_files\\n  $file ($(($file_size / 1024 / 1024))MB)\"\n        fi\n    fi\ndone\n\nif [ -n \"$large_files\" ]; then\n    echo \"❌ Files too large (max 5MB):$large_files\"\n    echo \"Consider using Git LFS for large files.\"\n    exit 1\nfi\n\necho \"✅ All file sizes are acceptable!\"\nexit 0"
+        },
+        {
+          "name": "Dependency Security Audit",
+          "description": "Checks for security vulnerabilities in dependencies",
+          "content": "#!/bin/sh\n# Pre-commit hook to check dependency security\n\necho \"Running security audit...\"\n\n# Check if package files are staged\npackage_changed=false\nfor file in $(git diff --cached --name-only); do\n    case \"$file\" in\n        package.json|package-lock.json|yarn.lock|Pipfile|requirements.txt|Gemfile.lock)\n            package_changed=true\n            break\n            ;;\n    esac\ndone\n\nif [ \"$package_changed\" = true ]; then\n    echo \"📦 Package files changed, running security audit...\"\n    \n    # Node.js projects\n    if [ -f \"package.json\" ]; then\n        npm audit --audit-level=moderate\n        if [ $? -ne 0 ]; then\n            echo \"❌ Security vulnerabilities found in npm packages!\"\n            exit 1\n        fi\n    fi\n    \n    # Python projects\n    if [ -f \"requirements.txt\" ] && command -v safety >/dev/null 2>&1; then\n        safety check -r requirements.txt\n        if [ $? -ne 0 ]; then\n            echo \"❌ Security vulnerabilities found in Python packages!\"\n            exit 1\n        fi\n    fi\nfi\n\necho \"✅ No security vulnerabilities detected!\"\nexit 0"
+        },
+        {
+          "name": "Code Coverage Check",
+          "description": "Ensures code coverage doesn't drop below threshold",
+          "content": "#!/bin/sh\n# Pre-commit hook to check code coverage\n\nmin_coverage=80\n\necho \"Checking code coverage...\"\n\n# Run tests with coverage\nif [ -f \"package.json\" ]; then\n    # Node.js with Jest or NYC\n    npm run test:coverage > /dev/null 2>&1\n    \n    # Extract coverage percentage (adjust based on your coverage tool)\n    coverage=$(npm run test:coverage 2>/dev/null | grep -o '[0-9]\\+\\.[0-9]\\+%' | head -1 | sed 's/%//')\n    \n    if [ -n \"$coverage\" ]; then\n        coverage_int=$(echo \"$coverage\" | cut -d'.' -f1)\n        if [ \"$coverage_int\" -lt \"$min_coverage\" ]; then\n            echo \"❌ Code coverage too low: ${coverage}% (minimum: ${min_coverage}%)\"\n            exit 1\n        fi\n        echo \"✅ Code coverage: ${coverage}%\"\n    fi\nfi\n\nexit 0"
+        },
+        {
+          "name": "Forbidden Keywords Check",
+          "description": "Prevents committing code with debugging statements or sensitive data",
+          "content": "#!/bin/sh\n# Pre-commit hook to check for forbidden keywords\n\nforbidden_patterns=\"console\\.log|debugger|TODO|FIXME|XXX|password|secret|api_key|private_key\"\n\necho \"Scanning for forbidden keywords...\"\n\n# Check staged files for forbidden patterns\nforbidden_files=\"\"\nfor file in $(git diff --cached --name-only --diff-filter=ACM); do\n    if [ -f \"$file\" ] && file \"$file\" | grep -q \"text\"; then\n        if git show \":$file\" | grep -inE \"$forbidden_patterns\" > /dev/null; then\n            matches=$(git show \":$file\" | grep -inE \"$forbidden_patterns\")\n            forbidden_files=\"$forbidden_files\\n  $file:\\n$(echo \"$matches\" | sed 's/^/    /')\"\n        fi\n    fi\ndone\n\nif [ -n \"$forbidden_files\" ]; then\n    echo \"❌ Forbidden keywords found:$forbidden_files\"\n    echo \"\\nPlease remove debugging statements and sensitive data.\"\n    exit 1\nfi\n\necho \"✅ No forbidden keywords detected!\"\nexit 0"
+        }
+      ]
+    },
+    {
+      "name": "commit-msg",
+      "displayName": "Commit Message Hook",
+      "description": "Validates commit message format and content",
+      "examples": [
+        {
+          "name": "Conventional Commits",
+          "description": "Enforces conventional commit message format (type: description)",
+          "content": "#!/bin/sh\n# Commit message hook to enforce conventional commit format\n\ncommit_regex='^(feat|fix|docs|style|refactor|test|chore)(\\(.+\\))?: .{1,50}'\n\nerror_msg=\"❌ Invalid commit message format!\nPlease use: type(scope): description\nTypes: feat, fix, docs, style, refactor, test, chore\nExample: feat(auth): add user login functionality\"\n\nif ! grep -qE \"$commit_regex\" \"$1\"; then\n    echo \"$error_msg\" >&2\n    exit 1\nfi\n\necho \"✅ Commit message format is valid!\"\nexit 0"
+        },
+        {
+          "name": "Ticket Number Validation",
+          "description": "Ensures commit messages include a ticket/issue number",
+          "content": "#!/bin/sh\n# Commit message hook to require ticket numbers\n\ncommit_msg=$(cat \"$1\")\nticket_regex='\\[#[0-9]+\\]|#[0-9]+|JIRA-[0-9]+|TICKET-[0-9]+'\n\nif ! echo \"$commit_msg\" | grep -qE \"$ticket_regex\"; then\n    echo \"❌ Commit message must include a ticket number!\"\n    echo \"Examples: [#123], #456, JIRA-789, TICKET-101\"\n    echo \"Current message: $commit_msg\"\n    exit 1\nfi\n\necho \"✅ Ticket number found in commit message!\"\nexit 0"
+        },
+        {
+          "name": "Message Length Check",
+          "description": "Validates commit message length and format",
+          "content": "#!/bin/sh\n# Commit message hook to check length and format\n\ncommit_msg=$(head -n 1 \"$1\")\nmsg_length=${#commit_msg}\n\nif [ $msg_length -lt 10 ]; then\n    echo \"❌ Commit message too short! Minimum 10 characters.\"\n    echo \"Current length: $msg_length\"\n    exit 1\nfi\n\nif [ $msg_length -gt 72 ]; then\n    echo \"❌ Commit message too long! Maximum 72 characters.\"\n    echo \"Current length: $msg_length\"\n    exit 1\nfi\n\necho \"✅ Commit message length is appropriate!\"\nexit 0"
+        },
+        {
+          "name": "Emoji Enforcement",
+          "description": "Requires commit messages to start with appropriate emojis",
+          "content": "#!/bin/sh\n# Commit message hook to enforce emoji usage\n\ncommit_msg=$(cat \"$1\")\n\n# Define allowed emojis and their meanings\nvalid_emojis=\"✨|🐛|📚|💄|♻️|⚡|🔧|🚀|🔒|🧪|📝|🎨|🔥|💚|👷|📈|🏷️|🌐|♿|💡|🍺|💬|🗃️|🔊|🔇|🚨|🚑|💥|🍎|🐧|🏁|🔖|🚩|💫|🗑️|📱|🤡\"\n\nif ! echo \"$commit_msg\" | grep -qE \"^($valid_emojis)\"; then\n    echo \"❌ Commit message must start with an appropriate emoji!\"\n    echo \"\"\n    echo \"Common emojis:\"\n    echo \"✨ New feature\"\n    echo \"🐛 Bug fix\"\n    echo \"📚 Documentation\"\n    echo \"💄 UI/style changes\"\n    echo \"♻️  Refactoring\"\n    echo \"⚡ Performance improvement\"\n    echo \"🔧 Configuration\"\n    echo \"🚀 Deployment\"\n    echo \"🧪 Tests\"\n    echo \"🔒 Security\"\n    echo \"\"\n    echo \"Current message: $commit_msg\"\n    exit 1\nfi\n\necho \"✅ Emoji found in commit message!\"\nexit 0"
+        },
+        {
+          "name": "Branch Name in Message",
+          "description": "Automatically includes branch name in commit message",
+          "content": "#!/bin/sh\n# Commit message hook to include branch name\n\nbranch_name=$(git symbolic-ref HEAD 2>/dev/null | sed -e 's,.*/\\(.*\\),\\1,')\ncommit_msg=$(cat \"$1\")\n\n# Skip for main/master/develop branches\nif echo \"$branch_name\" | grep -qE '^(main|master|develop)$'; then\n    exit 0\nfi\n\n# Check if branch name is already in the message\nif echo \"$commit_msg\" | grep -q \"$branch_name\"; then\n    echo \"✅ Branch name already in commit message!\"\n    exit 0\nfi\n\n# Extract ticket number from branch name (e.g., feature/PROJ-123-description)\nticket=$(echo \"$branch_name\" | grep -oE '[A-Z]+-[0-9]+|#[0-9]+' | head -1)\n\nif [ -n \"$ticket\" ]; then\n    # Prepend ticket number to commit message\n    echo \"[$ticket] $commit_msg\" > \"$1\"\n    echo \"✅ Added ticket number [$ticket] to commit message!\"\nelse\n    # Prepend branch name to commit message\n    echo \"[$branch_name] $commit_msg\" > \"$1\"\n    echo \"✅ Added branch name [$branch_name] to commit message!\"\nfi\n\nexit 0"
+        },
+        {
+          "name": "Signed-off-by Check",
+          "description": "Ensures commits are signed off (Developer Certificate of Origin)",
+          "content": "#!/bin/sh\n# Commit message hook to check for Signed-off-by line\n\ncommit_msg=$(cat \"$1\")\nauthor_email=$(git config user.email)\n\n# Check if Signed-off-by line exists\nif ! echo \"$commit_msg\" | grep -q \"^Signed-off-by: \"; then\n    echo \"❌ Commit must include 'Signed-off-by' line!\"\n    echo \"This indicates you agree to the Developer Certificate of Origin.\"\n    echo \"\"\n    echo \"Add the following line to your commit message:\"\n    echo \"Signed-off-by: $(git config user.name) <$author_email>\"\n    echo \"\"\n    echo \"Or use: git commit -s\"\n    exit 1\nfi\n\n# Verify the sign-off matches the author\nexpected_signoff=\"Signed-off-by: $(git config user.name) <$author_email>\"\nif ! echo \"$commit_msg\" | grep -qF \"$expected_signoff\"; then\n    echo \"⚠️  Warning: Signed-off-by doesn't match author information!\"\n    echo \"Expected: $expected_signoff\"\n    echo \"Please ensure the sign-off matches your git configuration.\"\nfi\n\necho \"✅ Signed-off-by line found!\"\nexit 0"
+        }
+      ]
+    },
+    {
+      "name": "pre-push",
+      "displayName": "Pre-push Hook",
+      "description": "Runs before pushing commits to remote repository",
+      "examples": [
+        {
+          "name": "Branch Protection",
+          "description": "Prevents pushing to protected branches like main/master",
+          "content": "#!/bin/sh\n# Pre-push hook to protect main/master branches\n\nprotected_branches=\"main master develop\"\ncurrent_branch=$(git symbolic-ref HEAD | sed -e 's,.*/\\(.*\\),\\1,')\n\nfor branch in $protected_branches; do\n    if [ \"$current_branch\" = \"$branch\" ]; then\n        echo \"❌ Direct push to '$branch' branch is not allowed!\"\n        echo \"Please create a feature branch and submit a pull request.\"\n        exit 1\n    fi\ndone\n\necho \"✅ Push to '$current_branch' branch allowed!\"\nexit 0"
+        },
+        {
+          "name": "Integration Tests",
+          "description": "Runs comprehensive tests before pushing",
+          "content": "#!/bin/sh\n# Pre-push hook to run integration tests\n\necho \"Running integration tests before push...\"\n\n# Run linting\necho \"🔍 Running linter...\"\nnpm run lint\nif [ $? -ne 0 ]; then\n    echo \"❌ Linting failed!\"\n    exit 1\nfi\n\n# Run unit tests\necho \"🧪 Running unit tests...\"\nnpm run test:unit\nif [ $? -ne 0 ]; then\n    echo \"❌ Unit tests failed!\"\n    exit 1\nfi\n\n# Run integration tests\necho \"🔗 Running integration tests...\"\nnpm run test:integration\nif [ $? -ne 0 ]; then\n    echo \"❌ Integration tests failed!\"\n    exit 1\nfi\n\necho \"✅ All tests passed! Pushing...\"\nexit 0"
+        },
+        {
+          "name": "Security Scan",
+          "description": "Runs security audit before pushing code",
+          "content": "#!/bin/sh\n# Pre-push hook to run security audit\n\necho \"Running security audit...\"\n\n# Check for secrets in code\necho \"🔒 Scanning for secrets...\"\nif command -v git-secrets >/dev/null 2>&1; then\n    git secrets --scan\n    if [ $? -ne 0 ]; then\n        echo \"❌ Potential secrets detected!\"\n        exit 1\n    fi\nfi\n\n# Run npm audit\necho \"🛡️ Running npm security audit...\"\nnpm audit --audit-level=high\nif [ $? -ne 0 ]; then\n    echo \"❌ High-risk security vulnerabilities found!\"\n    echo \"Run 'npm audit fix' to resolve issues.\"\n    exit 1\nfi\n\necho \"✅ Security checks passed!\"\nexit 0"
+        },
+        {
+          "name": "Build Verification",
+          "description": "Ensures the project builds successfully before push",
+          "content": "#!/bin/sh\n# Pre-push hook to verify build\n\necho \"Verifying build before push...\"\n\n# Clean previous builds\necho \"🧹 Cleaning previous builds...\"\nif [ -d \"dist\" ]; then rm -rf dist; fi\nif [ -d \"build\" ]; then rm -rf build; fi\n\n# Install dependencies if needed\nif [ -f \"package.json\" ]; then\n    if [ ! -d \"node_modules\" ]; then\n        echo \"📦 Installing dependencies...\"\n        npm ci\n    fi\n    \n    # Run build\n    echo \"🔨 Building project...\"\n    npm run build\n    \n    if [ $? -ne 0 ]; then\n        echo \"❌ Build failed! Cannot push.\"\n        exit 1\n    fi\nelif [ -f \"Makefile\" ]; then\n    echo \"🔨 Running make build...\"\n    make build\n    \n    if [ $? -ne 0 ]; then\n        echo \"❌ Build failed! Cannot push.\"\n        exit 1\n    fi\nelif [ -f \"pom.xml\" ]; then\n    echo \"🔨 Building Maven project...\"\n    mvn clean compile\n    \n    if [ $? -ne 0 ]; then\n        echo \"❌ Maven build failed! Cannot push.\"\n        exit 1\n    fi\nfi\n\necho \"✅ Build verification passed!\"\nexit 0"
+        },
+        {
+          "name": "Code Quality Gate",
+          "description": "Comprehensive code quality checks before push",
+          "content": "#!/bin/sh\n# Pre-push hook for comprehensive code quality checks\n\necho \"Running code quality gate...\"\n\n# TypeScript/JavaScript projects\nif [ -f \"package.json\" ]; then\n    echo \"📊 Running code quality checks...\"\n    \n    # Type checking\n    if [ -f \"tsconfig.json\" ]; then\n        echo \"🔍 Type checking...\"\n        npx tsc --noEmit\n        if [ $? -ne 0 ]; then\n            echo \"❌ TypeScript compilation errors found!\"\n            exit 1\n        fi\n    fi\n    \n    # Linting\n    echo \"🧹 Linting code...\"\n    npm run lint\n    if [ $? -ne 0 ]; then\n        echo \"❌ Linting errors found!\"\n        exit 1\n    fi\n    \n    # Unit tests with coverage\n    echo \"🧪 Running tests with coverage...\"\n    npm run test:coverage\n    if [ $? -ne 0 ]; then\n        echo \"❌ Tests failed!\"\n        exit 1\n    fi\n    \n    # Check bundle size (if applicable)\n    if command -v bundlesize >/dev/null 2>&1; then\n        echo \"📦 Checking bundle size...\"\n        npx bundlesize\n        if [ $? -ne 0 ]; then\n            echo \"❌ Bundle size check failed!\"\n            exit 1\n        fi\n    fi\nfi\n\necho \"✅ Code quality gate passed!\"\nexit 0"
+        },
+        {
+          "name": "Commit Message History Check",
+          "description": "Validates commit messages in the push",
+          "content": "#!/bin/sh\n# Pre-push hook to validate all commit messages\n\necho \"Validating commit messages...\"\n\nwhile read local_ref local_sha remote_ref remote_sha; do\n    # Skip branch deletion\n    if [ \"$local_sha\" = \"0000000000000000000000000000000000000000\" ]; then\n        continue\n    fi\n    \n    # Get list of commits being pushed\n    if [ \"$remote_sha\" = \"0000000000000000000000000000000000000000\" ]; then\n        # New branch - check all commits\n        range=\"$local_sha\"\n    else\n        # Existing branch - check new commits\n        range=\"$remote_sha..$local_sha\"\n    fi\n    \n    # Validate each commit message\n    git rev-list --no-merges \"$range\" | while read commit; do\n        msg=$(git log --format=%B -n 1 \"$commit\")\n        subject=$(echo \"$msg\" | head -n 1)\n        \n        # Check conventional commit format\n        if ! echo \"$subject\" | grep -qE '^(feat|fix|docs|style|refactor|test|chore)(\\(.+\\))?: .+'; then\n            echo \"❌ Invalid commit message format in $commit:\"\n            echo \"   '$subject'\"\n            echo \"   Must follow: type(scope): description\"\n            exit 1\n        fi\n        \n        # Check subject length\n        if [ ${#subject} -gt 72 ]; then\n            echo \"❌ Commit message too long in $commit (${#subject} > 72):\"\n            echo \"   '$subject'\"\n            exit 1\n        fi\n    done\n    \n    if [ $? -ne 0 ]; then\n        exit 1\n    fi\ndone\n\necho \"✅ All commit messages are valid!\"\nexit 0"
+        },
+        {
+          "name": "Remote Branch Sync Check",
+          "description": "Ensures branch is up to date with remote before push",
+          "content": "#!/bin/sh\n# Pre-push hook to check remote branch sync\n\necho \"Checking remote branch synchronization...\"\n\ncurrent_branch=$(git symbolic-ref HEAD 2>/dev/null | sed -e 's,.*/\\(.*\\),\\1,')\nremote_branch=\"origin/$current_branch\"\n\n# Fetch latest changes from remote\necho \"📡 Fetching latest changes...\"\ngit fetch origin \"$current_branch\" 2>/dev/null\n\n# Check if remote branch exists\nif git show-ref --verify --quiet \"refs/remotes/$remote_branch\"; then\n    # Check if local branch is behind remote\n    behind=$(git rev-list --count HEAD..\"$remote_branch\" 2>/dev/null)\n    \n    if [ \"$behind\" -gt 0 ]; then\n        echo \"❌ Your branch is $behind commit(s) behind '$remote_branch'!\"\n        echo \"Please pull the latest changes first:\"\n        echo \"   git pull origin $current_branch\"\n        exit 1\n    fi\n    \n    # Check for diverged branches\n    ahead=$(git rev-list --count \"$remote_branch\"..HEAD 2>/dev/null)\n    \n    if [ \"$ahead\" -gt 0 ] && [ \"$behind\" -gt 0 ]; then\n        echo \"❌ Your branch has diverged from '$remote_branch'!\"\n        echo \"Please rebase or merge with remote branch first.\"\n        exit 1\n    fi\nfi\n\necho \"✅ Branch is synchronized with remote!\"\nexit 0"
+        }
+      ]
+    },
+    {
+      "name": "post-commit",
+      "displayName": "Post-commit Hook",
+      "description": "Runs after a successful commit",
+      "examples": [
+        {
+          "name": "Notification Hook",
+          "description": "Sends notifications after successful commits",
+          "content": "#!/bin/sh\n# Post-commit hook to send notifications\n\ncommit_hash=$(git rev-parse HEAD)\ncommit_msg=$(git log -1 --pretty=%B)\nauthor=$(git log -1 --pretty=%an)\nbranch=$(git symbolic-ref HEAD | sed -e 's,.*/\\(.*\\),\\1,')\n\necho \"✅ Commit successful!\"\necho \"Hash: $commit_hash\"\necho \"Author: $author\"\necho \"Branch: $branch\"\necho \"Message: $commit_msg\"\n\n# Optional: Send to Slack, Discord, or other notification services\n# curl -X POST -H 'Content-type: application/json' \\\n#   --data '{\"text\":\"New commit by '$author' on '$branch': '$commit_msg'\"}' \\\n#   YOUR_WEBHOOK_URL\n\nexit 0"
+        },
+        {
+          "name": "Auto Documentation",
+          "description": "Automatically updates documentation after commits",
+          "content": "#!/bin/sh\n# Post-commit hook to update documentation\n\necho \"Updating documentation...\"\n\n# Check if there are changes to source files\nchanged_files=$(git diff-tree --no-commit-id --name-only -r HEAD)\nsource_changed=false\n\nfor file in $changed_files; do\n    case \"$file\" in\n        *.js|*.ts|*.jsx|*.tsx|*.py|*.java)\n            source_changed=true\n            break\n            ;;\n    esac\ndone\n\nif [ \"$source_changed\" = true ]; then\n    echo \"📚 Source files changed, updating documentation...\"\n    \n    # Generate API docs (adjust command based on your setup)\n    # npm run docs:generate\n    \n    # Update README if needed\n    # python scripts/update_readme.py\n    \n    echo \"✅ Documentation updated!\"\nelse\n    echo \"ℹ️ No source file changes, skipping documentation update.\"\nfi\n\nexit 0"
+        },
+        {
+          "name": "Changelog Update",
+          "description": "Automatically updates CHANGELOG.md based on commit messages",
+          "content": "#!/bin/sh\n# Post-commit hook to update changelog\n\nchangelog_file=\"CHANGELOG.md\"\ncommit_hash=$(git rev-parse --short HEAD)\ncommit_msg=$(git log -1 --pretty=%B | head -1)\ncommit_author=$(git log -1 --pretty=%an)\ncommit_date=$(git log -1 --pretty=%ad --date=short)\n\necho \"Updating changelog...\"\n\n# Check if this is a conventional commit\nif echo \"$commit_msg\" | grep -qE '^(feat|fix|docs|style|refactor|test|chore)'; then\n    commit_type=$(echo \"$commit_msg\" | sed -n 's/^\\([^(:]*\\).*/\\1/p')\n    commit_desc=$(echo \"$commit_msg\" | sed -n 's/^[^:]*: *\\(.*\\)/\\1/p')\n    \n    # Create changelog entry\n    case \"$commit_type\" in\n        feat)\n            section=\"### ✨ Features\"\n            icon=\"✨\"\n            ;;\n        fix)\n            section=\"### 🐛 Bug Fixes\"\n            icon=\"🐛\"\n            ;;\n        docs)\n            section=\"### 📚 Documentation\"\n            icon=\"📚\"\n            ;;\n        *)\n            section=\"### 🔧 Other Changes\"\n            icon=\"🔧\"\n            ;;\n    esac\n    \n    # Check if changelog exists\n    if [ ! -f \"$changelog_file\" ]; then\n        echo \"# Changelog\\n\\nAll notable changes to this project will be documented in this file.\\n\" > \"$changelog_file\"\n    fi\n    \n    # Add entry to changelog\n    temp_file=$(mktemp)\n    {\n        head -n 3 \"$changelog_file\"\n        echo \"## [Unreleased]\\n\"\n        echo \"$section\\n\"\n        echo \"- $icon $commit_desc ([\\`$commit_hash\\`](../../commit/$commit_hash))\\n\"\n        tail -n +4 \"$changelog_file\" | grep -v \"^## \\[Unreleased\\]\" | grep -v \"^$section\"\n    } > \"$temp_file\"\n    \n    mv \"$temp_file\" \"$changelog_file\"\n    \n    echo \"✅ Changelog updated with: $commit_desc\"\nelse\n    echo \"ℹ️ Not a conventional commit, skipping changelog update.\"\nfi\n\nexit 0"
+        },
+        {
+            "name": "Branch Cleanup",
+            "description": "Cleans up merged feature branches automatically",
+            "content": "#!/bin/sh\n# Post-commit hook to clean up merged branches\n\ncurrent_branch=$(git symbolic-ref HEAD 2>/dev/null | sed -e 's,.*/\\(.*\\),\\1,')\n\necho \"Checking for merged branches to clean up...\"\n\n# Only run on main/master branch\nif echo \"$current_branch\" | grep -qE '^(main|master)$'; then\n    # Find merged branches (excluding main, master, develop)\n    merged_branches=$(git branch --merged | grep -vE '^\\*|main|master|develop' | xargs)\n    \n    if [ -n \"$merged_branches\" ]; then\n        echo \"🧹 Found merged branches: $merged_branches\"\n        \n        for branch in $merged_branches; do\n            # Ask before deleting (in interactive mode)\n            if [ -t 1 ]; then\n                echo -n \"Delete merged branch '$branch'? (y/N): \"\n                read answer\n                if [ \"$answer\" = \"y\" ] || [ \"$answer\" = \"Y\" ]; then\n                    git branch -d \"$branch\"\n                    echo \"✅ Deleted branch: $branch\"\n                fi\n            else\n                # Non-interactive mode - log only\n                echo \"ℹ️  Merged branch available for cleanup: $branch\"\n            fi\n        done\n    else\n        echo \"ℹ️  No merged branches to clean up.\"\n    fi\nelse\n    echo \"ℹ️  Branch cleanup only runs on main/master branch.\"\nfi\n\nexit 0"
+        }
+      ]
+    },
+    {
+      "name": "pre-receive",
+      "displayName": "Pre-receive Hook",
+      "description": "Runs on the server before accepting pushed commits",
+      "examples": [
+        {
+          "name": "Branch Policy Enforcement",
+          "description": "Enforces branch naming and protection policies on the server",
+          "content": "#!/bin/sh\n# Pre-receive hook to enforce branch policies\n\nwhile read oldrev newrev refname; do\n    branch=$(echo $refname | sed -n 's/^refs\\/heads\\///p')\n    \n    # Skip if not a branch\n    if [ -z \"$branch\" ]; then\n        continue\n    fi\n    \n    # Check branch naming convention\n    if ! echo \"$branch\" | grep -qE '^(feature|bugfix|hotfix|release)\\/[a-z0-9-]+$|^(main|master|develop)$'; then\n        echo \"❌ Branch name '$branch' doesn't follow naming convention!\"\n        echo \"Use: feature/*, bugfix/*, hotfix/*, release/*, main, master, or develop\"\n        exit 1\n    fi\n    \n    # Protect main branches from force push\n    if echo \"$branch\" | grep -qE '^(main|master|develop)$'; then\n        if [ \"$oldrev\" != \"0000000000000000000000000000000000000000\" ]; then\n            # Check if this is a force push\n            if ! git merge-base --is-ancestor \"$oldrev\" \"$newrev\"; then\n                echo \"❌ Force push to '$branch' is not allowed!\"\n                exit 1\n            fi\n        fi\n    fi\ndone\n\necho \"✅ Branch policies satisfied!\"\nexit 0"
+        },
+        {
+          "name": "Commit Size Limit",
+          "description": "Limits the size of commits and files being pushed",
+          "content": "#!/bin/sh\n# Pre-receive hook to limit commit and file sizes\n\nmax_file_size=10485760  # 10MB\nmax_commit_files=50\n\nwhile read oldrev newrev refname; do\n    # Skip deletion\n    if [ \"$newrev\" = \"0000000000000000000000000000000000000000\" ]; then\n        continue\n    fi\n    \n    # Get commits being pushed\n    if [ \"$oldrev\" = \"0000000000000000000000000000000000000000\" ]; then\n        # New branch\n        commits=$(git rev-list \"$newrev\")\n    else\n        # Existing branch\n        commits=$(git rev-list \"$oldrev..$newrev\")\n    fi\n    \n    for commit in $commits; do\n        # Check number of files in commit\n        file_count=$(git diff-tree --no-commit-id --name-only -r \"$commit\" | wc -l)\n        if [ \"$file_count\" -gt \"$max_commit_files\" ]; then\n            echo \"❌ Commit $commit has too many files ($file_count > $max_commit_files)!\"\n            exit 1\n        fi\n        \n        # Check file sizes\n        git diff-tree --no-commit-id --name-only -r \"$commit\" | while read file; do\n            if [ -n \"$file\" ]; then\n                size=$(git cat-file -s \"$commit:$file\" 2>/dev/null || echo 0)\n                if [ \"$size\" -gt \"$max_file_size\" ]; then\n                    echo \"❌ File '$file' is too large ($(($size/1024/1024))MB > 10MB)!\"\n                    exit 1\n                fi\n            fi\n        done\n    done\ndone\n\necho \"✅ Commit and file size limits satisfied!\"\nexit 0"
+        }
+      ]
+    },
+    {
+      "name": "post-receive",
+      "displayName": "Post-receive Hook",
+      "description": "Runs on the server after accepting pushed commits",
+      "examples": [
+        {
+          "name": "Deployment Trigger",
+          "description": "Automatically triggers deployment after pushes to main branch",
+          "content": "#!/bin/sh\n# Post-receive hook to trigger deployment\n\nwhile read oldrev newrev refname; do\n    branch=$(echo $refname | sed -n 's/^refs\\/heads\\///p')\n    \n    # Only deploy from main/master branch\n    if [ \"$branch\" = \"main\" ] || [ \"$branch\" = \"master\" ]; then\n        echo \"🚀 Deploying changes from $branch branch...\"\n        \n        # Change to deployment directory\n        cd /var/www/myapp || exit 1\n        \n        # Pull latest changes\n        git fetch origin\n        git reset --hard \"origin/$branch\"\n        \n        # Install dependencies\n        echo \"📦 Installing dependencies...\"\n        npm install --production\n        \n        # Build application\n        echo \"🔨 Building application...\"\n        npm run build\n        \n        # Restart services\n        echo \"♻️ Restarting services...\"\n        sudo systemctl restart myapp\n        sudo systemctl reload nginx\n        \n        echo \"✅ Deployment completed successfully!\"\n        \n        # Send deployment notification\n        # curl -X POST -H 'Content-type: application/json' \\\n        #   --data '{\"text\":\"🚀 Deployment completed for '$branch' branch\"}' \\\n        #   YOUR_WEBHOOK_URL\n    else\n        echo \"ℹ️ No deployment triggered for branch: $branch\"\n    fi\ndone\n\nexit 0"
+        },
+        {
+          "name": "Backup Creation",
+          "description": "Creates backups after receiving commits",
+          "content": "#!/bin/sh\n# Post-receive hook to create backups\n\nbackup_dir=\"/backups/git-repos\"\nrepo_name=$(basename \"$PWD\")\ntimestamp=$(date +\"%Y%m%d_%H%M%S\")\nbackup_file=\"$backup_dir/${repo_name}_${timestamp}.tar.gz\"\n\necho \"📦 Creating backup...\"\n\n# Create backup directory if it doesn't exist\nmkdir -p \"$backup_dir\"\n\n# Create compressed backup\ntar -czf \"$backup_file\" -C \"$(dirname \"$PWD\")\" \"$(basename \"$PWD\")\"\n\nif [ $? -eq 0 ]; then\n    echo \"✅ Backup created: $backup_file\"\n    \n    # Clean up old backups (keep last 10)\n    ls -t \"$backup_dir/${repo_name}_\"*.tar.gz | tail -n +11 | xargs rm -f 2>/dev/null\n    \n    echo \"🧹 Old backups cleaned up\"\nelse\n    echo \"❌ Backup creation failed!\"\nfi\n\nexit 0"
+        }
+      ]
+    },
+    {
+      "name": "update",
+      "displayName": "Update Hook",
+      "description": "Runs when a branch or tag is updated via push",
+      "examples": [
+        {
+          "name": "Tag Validation",
+          "description": "Validates tag format and prevents unauthorized tag operations",
+          "content": "#!/bin/sh\n# Update hook to validate tags\n\nrefname=\"$1\"\noldrev=\"$2\"\nnewrev=\"$3\"\n\n# Only process tags\nif echo \"$refname\" | grep -q '^refs/tags/'; then\n    tag_name=$(echo \"$refname\" | sed 's|^refs/tags/||')\n    \n    # Validate semantic versioning\n    if ! echo \"$tag_name\" | grep -qE '^v?[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9-]+)?(\\+[a-zA-Z0-9-]+)?$'; then\n        echo \"❌ Tag '$tag_name' doesn't follow semantic versioning!\"\n        echo \"Use format: v1.2.3 or 1.2.3 (with optional pre-release and build metadata)\"\n        exit 1\n    fi\n    \n    # Prevent tag deletion (optional)\n    if [ \"$newrev\" = \"0000000000000000000000000000000000000000\" ]; then\n        echo \"❌ Tag deletion is not allowed!\"\n        exit 1\n    fi\n    \n    # Check if tag already exists (for updates)\n    if [ \"$oldrev\" != \"0000000000000000000000000000000000000000\" ]; then\n        echo \"❌ Tag '$tag_name' already exists and cannot be updated!\"\n        exit 1\n    fi\n    \n    echo \"✅ Tag '$tag_name' is valid!\"\nfi\n\nexit 0"
+        }
+      ]
+    }
+  ]
+}
