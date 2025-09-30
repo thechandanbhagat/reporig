@@ -177,6 +177,39 @@ export class GitHooksManager {
 	}
 
 	getHookTemplates(): HookTemplate[] {
+		try {
+			// Get the extension path
+			const extensionPath = path.dirname(__dirname);
+			const templatesPath = path.join(extensionPath, 'src', 'gitHookTemplates.json');
+			
+			// Read and parse the JSON file
+			const templatesData = fs.readFileSync(templatesPath, 'utf8');
+			const templatesJson = JSON.parse(templatesData);
+			
+			// Convert JSON structure to HookTemplate array
+			const templates: HookTemplate[] = [];
+			
+			templatesJson.templates.forEach((hookType: any) => {
+				hookType.examples.forEach((example: any) => {
+					templates.push({
+						name: `${hookType.name}-${example.name.toLowerCase().replace(/\s+/g, '-')}`,
+						description: `${hookType.displayName}: ${example.description}`,
+						content: example.content,
+						language: 'shell',
+						category: hookType.name as any
+					});
+				});
+			});
+			
+			return templates;
+		} catch (error) {
+			console.error('Error loading hook templates:', error);
+			// Return fallback templates if JSON loading fails
+			return this.getFallbackTemplates();
+		}
+	}
+
+	private getFallbackTemplates(): HookTemplate[] {
 		return [
 			{
 				name: 'pre-commit-lint',
@@ -186,153 +219,13 @@ export class GitHooksManager {
 				content: `#!/bin/sh
 # Pre-commit hook to run linting
 
-# Run ESLint if package.json exists and has eslint
-if [ -f "package.json" ] && grep -q "eslint" package.json; then
-    echo "Running ESLint..."
-    npm run lint
-    if [ $? -ne 0 ]; then
-        echo "ESLint failed. Please fix the issues before committing."
-        exit 1
-    fi
-fi
-
-# Run other linters as needed
-# Add your custom linting commands here
-
-echo "Pre-commit checks passed!"
-exit 0`
-			},
-			{
-				name: 'pre-commit-format',
-				description: 'Pre-commit hook that formats code',
-				language: 'shell',
-				category: 'pre-commit',
-				content: `#!/bin/sh
-# Pre-commit hook to format code
-
-# Run Prettier if available
-if [ -f "package.json" ] && grep -q "prettier" package.json; then
-    echo "Running Prettier..."
-    npm run format
-    # Add formatted files back to staging
-    git add -A
-fi
-
-# Run other formatters as needed
-# Add your custom formatting commands here
-
-exit 0`
-			},
-			{
-				name: 'commit-msg-validate',
-				description: 'Commit message validation hook',
-				language: 'shell',
-				category: 'pre-commit',
-				content: `#!/bin/sh
-# Commit message validation hook
-
-commit_regex='^(feat|fix|docs|style|refactor|test|chore)(\(.+\))?: .{1,50}'
-
-error_msg="Aborting commit. Your commit message is malformed.
-Commit message should follow the pattern: type(scope): description
-Types: feat, fix, docs, style, refactor, test, chore
-Example: feat(auth): add user login functionality"
-
-if ! grep -qE "$commit_regex" "$1"; then
-    echo "$error_msg" >&2
+echo "Running linting checks..."
+npm run lint
+if [ $? -ne 0 ]; then
+    echo "❌ Linting failed. Please fix issues before committing."
     exit 1
-fi`
-			},
-			{
-				name: 'pre-push-test',
-				description: 'Pre-push hook that runs tests',
-				language: 'shell',
-				category: 'pre-push',
-				content: `#!/bin/sh
-# Pre-push hook to run tests
-
-protected_branch='main'
-current_branch=$(git symbolic-ref HEAD | sed -e 's,.*/\\(.*\\),\\1,')
-
-# Check if we're pushing to protected branch
-if [ $protected_branch = $current_branch ]; then
-    echo "Running tests before push to $protected_branch..."
-    
-    # Run tests based on project type
-    if [ -f "package.json" ]; then
-        npm test
-    elif [ -f "Cargo.toml" ]; then
-        cargo test
-    elif [ -f "requirements.txt" ] || [ -f "pyproject.toml" ]; then
-        python -m pytest
-    fi
-    
-    if [ $? -ne 0 ]; then
-        echo "Tests failed. Push aborted."
-        exit 1
-    fi
-    
-    echo "Tests passed. Proceeding with push."
 fi
-
-exit 0`
-			},
-			{
-				name: 'post-commit-notify',
-				description: 'Post-commit hook for notifications',
-				language: 'shell',
-				category: 'post-commit',
-				content: `#!/bin/sh
-# Post-commit hook for notifications
-
-commit_hash=$(git rev-parse HEAD)
-commit_msg=$(git log -1 --pretty=%B)
-author=$(git log -1 --pretty=%an)
-
-echo "Commit completed:"
-echo "Hash: $commit_hash"
-echo "Author: $author"
-echo "Message: $commit_msg"
-
-# Add your notification logic here
-# Examples:
-# - Send to Slack webhook
-# - Update project management tools
-# - Trigger CI/CD pipelines`
-			},
-			{
-				name: 'pre-commit-security',
-				description: 'Pre-commit security checks',
-				language: 'shell',
-				category: 'pre-commit',
-				content: `#!/bin/sh
-# Pre-commit security checks
-
-echo "Running security checks..."
-
-# Check for secrets in staged files
-if command -v git-secrets >/dev/null 2>&1; then
-    git secrets --scan
-    if [ $? -ne 0 ]; then
-        echo "Security check failed: potential secrets detected!"
-        exit 1
-    fi
-fi
-
-# Check for common security patterns
-staged_files=$(git diff --cached --name-only)
-for file in $staged_files; do
-    if [ -f "$file" ]; then
-        # Check for hardcoded passwords, API keys, etc.
-        if grep -i "password\|api_key\|secret\|token" "$file" | grep -v "placeholder\|example\|TODO"; then
-            echo "Warning: Potential hardcoded credentials found in $file"
-            echo "Please review and remove any sensitive information."
-            exit 1
-        fi
-    fi
-done
-
-echo "Security checks passed!"
+echo "✅ Linting passed!"
 exit 0`
 			}
 		];
