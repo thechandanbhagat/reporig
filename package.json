@@ -2,8 +2,27 @@
   "name": "reporig",
   "displayName": "RepoRig",
   "description": "Rig up your repository configurations with ease - manage git settings, git hooks, detect repositories, and edit configurations directly in VS Code",
-  "version": "0.0.1",
-  "publisher": "reporig-dev",
+  "version": "1.0.0",
+  "publisher": "thechandanbhagat",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thechandanbhagat/reporig.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thechandanbhagat/reporig/issues"
+  },
+  "homepage": "https://github.com/thechandanbhagat/reporig#readme",
+  "keywords": [
+    "git",
+    "configuration",
+    "hooks",
+    "repository",
+    "scm",
+    "git config",
+    "git hooks",
+    "version control"
+  ],
   "engines": {
     "vscode": "^1.104.0"
   },
