@@ -1270,7 +1270,7 @@ export class RepoRigMainWebviewProvider {
         }
 
         function deleteConfig(key, scope) {
-            if (confirm(\`Are you sure you want to delete \${key} (\${scope})?\`)) {
+            if (confirm(\`Delete Git Configuration?\\n\\nThis will permanently remove:\\n• Key: \${key}\\n• Scope: \${scope}\\n\\nThis action cannot be undone. Are you sure?\`)) {
                 vscode.postMessage({
                     type: 'deleteConfig',
                     key,
@@ -1454,6 +1454,9 @@ export class RepoRigMainWebviewProvider {
         }
 
         // Make functions globally available
+        window.editConfig = editConfig;
+        window.deleteConfig = deleteConfig;
+        window.toggleAddConfigForm = toggleAddConfigForm;
         window.editHook = editHook;
         window.deleteHook = deleteHook;
         window.useTemplate = useTemplate;
