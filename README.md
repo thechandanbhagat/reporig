@@ -6,18 +6,36 @@ RepoRig is a VS Code extension that helps you manage git configurations directly
 
 ## Features
 
+### Git Configuration Management
 - **🔍 Git Repository Detection**: Automatically detects if your workspace contains a git repository
 - **📋 Configuration Listing**: View all local and global git configurations in an organized tree view
 - **✏️ Easy Editing**: Edit git configurations through intuitive UI with validation
 - **🎯 Workspace-Focused**: Manage repository-specific settings efficiently
+
+### Git Hooks Management 🎣
+- **📜 Hook Overview**: View all git hooks with their status (active/inactive/not configured)
+- **🔧 Hook Creation**: Create new hooks using predefined templates or from scratch
+- **✏️ Hook Editing**: Edit hook scripts with syntax highlighting and auto-save
+- **🗑️ Hook Management**: Delete, enable, or disable hooks with one click
+- **📚 Built-in Templates**: Pre-configured templates for common use cases:
+  - Pre-commit linting and formatting
+  - Commit message validation
+  - Pre-push testing
+  - Security checks
+  - Post-commit notifications
 - **⚡ Command Palette Integration**: Quick access to all RepoRig commands
 
 ### Commands Available
 
+#### Git Configuration Commands
 - `RepoRig: Check Git Repository Status` - Verify if current workspace is a git repository
 - `RepoRig: List Git Configurations` - Show all git configurations in a quick pick menu
 - `RepoRig: Edit Git Configuration` - Modify git settings with guided input
 - `RepoRig: Open Configuration Panel` - Show the git configuration tree view
+
+#### Git Hooks Commands  
+- `RepoRig: List Git Hooks` - View all git hooks in the hooks panel
+- `RepoRig: Create Git Hook` - Create a new hook from templates or scratch
 
 ## Usage
 
@@ -26,12 +44,22 @@ RepoRig is a VS Code extension that helps you manage git configurations directly
 3. Type "RepoRig" to see available commands
 4. Or use the Git Configuration panel in the Source Control view
 
-### Git Configuration Panel
+### Source Control Panels
 
-The extension adds a "Git Configuration" panel to the Source Control view when a git repository is detected. This panel shows:
+When a git repository is detected, RepoRig adds two panels to the Source Control view:
+
+#### Git Configuration Panel
 - Local repository configurations
-- Global git configurations
+- Global git configurations  
 - Easy-to-read key-value pairs with scope indicators
+
+#### Git Hooks Panel
+- All git hooks with visual status indicators:
+  - ✅ **Active**: Hook exists and is executable
+  - ⚠️ **Inactive**: Hook exists but is not executable
+  - ➖ **Not configured**: Hook doesn't exist
+- Right-click context menus for quick actions
+- Inline buttons for edit, toggle, and delete operations
 
 ## Requirements
 
@@ -43,10 +71,22 @@ The extension adds a "Git Configuration" panel to the Source Control view when a
 
 This extension doesn't add any VS Code settings currently. All configuration is handled through git's native configuration system.
 
+## Git Hooks Templates
+
+RepoRig includes several built-in hook templates to get you started:
+
+- **Pre-commit Lint**: Runs linting tools before commits
+- **Pre-commit Format**: Automatically formats code before commits  
+- **Commit Message Validation**: Enforces conventional commit message format
+- **Pre-push Testing**: Runs tests before pushing to main branch
+- **Security Checks**: Scans for hardcoded secrets and credentials
+- **Post-commit Notifications**: Sends notifications after commits
+
 ## Known Issues
 
 - System-level git configurations are not yet displayed (coming in future version)
 - Large configuration lists might not be paginated
+- Hook templates are currently limited to shell scripts (more languages coming)
 
 ## Release Notes
 

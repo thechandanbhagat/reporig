@@ -1,7 +1,7 @@
 {
   "name": "reporig",
   "displayName": "RepoRig",
-  "description": "Rig up your repository configurations with ease - manage git settings, detect repositories, and edit configurations directly in VS Code",
+  "description": "Rig up your repository configurations with ease - manage git settings, git hooks, detect repositories, and edit configurations directly in VS Code",
   "version": "0.0.1",
   "publisher": "reporig-dev",
   "engines": {
@@ -44,6 +44,40 @@
       {
         "command": "reporig.openMainView",
         "title": "RepoRig: Open in Main Editor"
+      },
+      {
+        "command": "reporig.listHooks",
+        "title": "RepoRig: List Git Hooks",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "reporig.createHook",
+        "title": "RepoRig: Create Git Hook",
+        "icon": "$(add)"
+      },
+      {
+        "command": "reporig.editHook",
+        "title": "Edit Hook",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "reporig.deleteHook",
+        "title": "Delete Hook",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "reporig.toggleHook",
+        "title": "Toggle Hook Active/Inactive",
+        "icon": "$(symbol-boolean)"
+      },
+      {
+        "command": "reporig.refreshHooks",
+        "title": "Refresh Hooks",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "reporig.viewHook",
+        "title": "View Hook"
       }
     ],
     "views": {
@@ -62,6 +96,12 @@
           "name": "Git Configuration",
           "when": "reporig.isGitRepository",
           "icon": "$(gear)"
+        },
+        {
+          "id": "reporig.gitHooks",
+          "name": "Git Hooks",
+          "when": "reporig.isGitRepository",
+          "icon": "$(symbol-event)"
         }
       ]
     },
@@ -87,6 +127,64 @@
         {
           "command": "reporig.editConfig",
           "when": "reporig.isGitRepository"
+        },
+        {
+          "command": "reporig.listHooks",
+          "when": "reporig.isGitRepository"
+        },
+        {
+          "command": "reporig.createHook",
+          "when": "reporig.isGitRepository"
+        },
+        {
+          "command": "reporig.viewHook",
+          "when": "false"
+        },
+        {
+          "command": "reporig.editHook",
+          "when": "false"
+        },
+        {
+          "command": "reporig.deleteHook",
+          "when": "false"
+        },
+        {
+          "command": "reporig.toggleHook",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "reporig.refreshHooks",
+          "when": "view == reporig.gitHooks",
+          "group": "navigation"
+        },
+        {
+          "command": "reporig.createHook",
+          "when": "view == reporig.gitHooks",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "reporig.editHook",
+          "when": "view == reporig.gitHooks && viewItem == existingHook",
+          "group": "inline@1"
+        },
+        {
+          "command": "reporig.toggleHook",
+          "when": "view == reporig.gitHooks && viewItem == existingHook",
+          "group": "inline@2"
+        },
+        {
+          "command": "reporig.deleteHook",
+          "when": "view == reporig.gitHooks && viewItem == existingHook",
+          "group": "inline@3"
+        },
+        {
+          "command": "reporig.createHook",
+          "when": "view == reporig.gitHooks && viewItem == missingHook",
+          "group": "inline@1"
         }
       ]
     }
