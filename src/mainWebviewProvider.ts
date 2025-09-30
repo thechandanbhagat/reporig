@@ -113,12 +113,16 @@ export class RepoRigMainWebviewProvider {
                 description: getGitConfigDescription(config.key)
             }));
 
+            // Get the latest config change for the accordion
+            const latestChange = await this.getLatestConfigChange(workspaceRoot);
+
             webview.postMessage({
                 type: 'configs',
                 data: {
                     configs,
                     isGitRepo,
-                    workspaceRoot
+                    workspaceRoot,
+                    latestChange
                 }
             });
         } catch (error) {
@@ -140,15 +144,31 @@ export class RepoRigMainWebviewProvider {
             const { promisify } = require('util');
             const execAsync = promisify(exec);
 
+            // Check if config already exists to determine if it's an update or create
+            let existingValue = null;
+            try {
+                const scopeFlag = scope === 'local' ? '--local' : '--global';
+                const checkCmd = `git config ${scopeFlag} "${key}"`;
+                const { stdout } = await execAsync(checkCmd, scope === 'local' ? { cwd: workspaceRoot } : {});
+                existingValue = stdout.trim();
+            } catch {
+                // Config doesn't exist, this is a new config
+            }
+
             const scopeFlag = scope === 'local' ? '--local' : '--global';
             const cmd = `git config ${scopeFlag} "${key}" "${value}"`;
 
             await execAsync(cmd, scope === 'local' ? { cwd: workspaceRoot } : {});
             
+            // Record the change in history
+            const action = existingValue ? 'updated' : 'created';
+            await this.addConfigChangeToHistory(workspaceRoot, key, value, scope, action);
+            
 			webview.postMessage({
 				type: 'success',
 				message: `Saved ${key} = ${value} (${scope})`
-			});            // Reload configs
+			});            
+            // Reload configs
             await this.loadAndSendConfigs(webview);
         } catch (error) {
             webview.postMessage({
@@ -169,10 +189,26 @@ export class RepoRigMainWebviewProvider {
             const { promisify } = require('util');
             const execAsync = promisify(exec);
 
+            // Get the current value before deleting for history
+            let deletedValue = null;
+            try {
+                const scopeFlag = scope === 'local' ? '--local' : '--global';
+                const getCmd = `git config ${scopeFlag} "${key}"`;
+                const { stdout } = await execAsync(getCmd, scope === 'local' ? { cwd: workspaceRoot } : {});
+                deletedValue = stdout.trim();
+            } catch {
+                // Config might not exist
+            }
+
             const scopeFlag = scope === 'local' ? '--local' : '--global';
             const cmd = `git config ${scopeFlag} --unset "${key}"`;
 
             await execAsync(cmd, scope === 'local' ? { cwd: workspaceRoot } : {});
+            
+            // Record the deletion in history (value will be null to indicate deletion)
+            if (workspaceRoot) {
+                await this.addConfigChangeToHistory(workspaceRoot, key, deletedValue, scope, 'deleted');
+            }
             
             webview.postMessage({
                 type: 'success',
@@ -425,6 +461,81 @@ export class RepoRigMainWebviewProvider {
                 message: `Failed to load hook templates: ${error}`
             });
         }
+    }
+
+    // Config History Management Methods
+    private static async getConfigHistoryPath(workspaceRoot: string): Promise<string> {
+        const path = require('path');
+        const historyDir = path.join(workspaceRoot, '.vscode', '.reporig');
+        return path.join(historyDir, 'config-history.json');
+    }
+
+    private static async ensureConfigHistoryDir(workspaceRoot: string): Promise<void> {
+        const path = require('path');
+        const fs = require('fs').promises;
+        
+        const historyDir = path.join(workspaceRoot, '.vscode', '.reporig');
+        
+        try {
+            await fs.access(historyDir);
+        } catch {
+            await fs.mkdir(historyDir, { recursive: true });
+        }
+    }
+
+    private static async loadConfigHistory(workspaceRoot: string): Promise<any[]> {
+        try {
+            const historyPath = await this.getConfigHistoryPath(workspaceRoot);
+            const fs = require('fs').promises;
+            
+            const data = await fs.readFile(historyPath, 'utf8');
+            return JSON.parse(data);
+        } catch {
+            return [];
+        }
+    }
+
+    private static async saveConfigHistory(workspaceRoot: string, history: any[]): Promise<void> {
+        await this.ensureConfigHistoryDir(workspaceRoot);
+        const historyPath = await this.getConfigHistoryPath(workspaceRoot);
+        const fs = require('fs').promises;
+        
+        await fs.writeFile(historyPath, JSON.stringify(history, null, 2), 'utf8');
+    }
+
+    private static async addConfigChangeToHistory(
+        workspaceRoot: string, 
+        key: string, 
+        value: string | null, 
+        scope: string, 
+        action: 'created' | 'updated' | 'deleted'
+    ): Promise<void> {
+        const history = await this.loadConfigHistory(workspaceRoot);
+        
+        const change = {
+            key,
+            value,
+            scope,
+            action,
+            timestamp: new Date().toISOString(),
+            date: new Date().toLocaleDateString(),
+            time: new Date().toLocaleTimeString()
+        };
+        
+        // Add to beginning of array (most recent first)
+        history.unshift(change);
+        
+        // Keep only last 50 changes
+        if (history.length > 50) {
+            history.splice(50);
+        }
+        
+        await this.saveConfigHistory(workspaceRoot, history);
+    }
+
+    private static async getLatestConfigChange(workspaceRoot: string): Promise<any | null> {
+        const history = await this.loadConfigHistory(workspaceRoot);
+        return history.length > 0 ? history[0] : null;
     }
 
     private static getWebviewContent(webview: vscode.Webview): string {
@@ -906,6 +1017,120 @@ export class RepoRigMainWebviewProvider {
             font-size: 12px;
             margin-top: 4px;
         }
+
+        /* Last Changed Accordion Styles */
+        .last-changed-accordion {
+            margin: 16px 0;
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 8px;
+            overflow: hidden;
+            background-color: var(--vscode-input-background);
+        }
+
+        .last-changed-header {
+            background-color: var(--vscode-list-headerBackground);
+            padding: 12px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: background-color 0.2s ease;
+        }
+
+        .last-changed-header:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .last-changed-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--vscode-foreground);
+        }
+
+        .last-changed-chevron {
+            transition: transform 0.2s ease;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .last-changed-accordion.expanded .last-changed-chevron {
+            transform: rotate(90deg);
+        }
+
+        .last-changed-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .last-changed-accordion.expanded .last-changed-content {
+            max-height: 200px;
+        }
+
+        .last-changed-details {
+            padding: 16px;
+            border-top: 1px solid var(--vscode-panel-border);
+        }
+
+        .last-changed-item {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .change-action-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .change-action-created {
+            background-color: var(--vscode-terminal-ansiGreen);
+            color: white;
+        }
+
+        .change-action-updated {
+            background-color: var(--vscode-terminal-ansiBlue);
+            color: white;
+        }
+
+        .change-action-deleted {
+            background-color: var(--vscode-terminal-ansiRed);
+            color: white;
+        }
+
+        .change-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .change-key {
+            font-family: var(--vscode-editor-font-family);
+            font-weight: 600;
+            color: var(--vscode-terminal-ansiCyan);
+            font-size: 14px;
+        }
+
+        .change-value {
+            font-family: var(--vscode-editor-font-family);
+            color: var(--vscode-foreground);
+            font-size: 12px;
+            margin-top: 2px;
+            opacity: 0.8;
+        }
+
+        .change-value.deleted {
+            text-decoration: line-through;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .change-timestamp {
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            text-align: right;
+        }
     </style>
 </head>
 <body>
@@ -929,6 +1154,21 @@ export class RepoRigMainWebviewProvider {
                 <button id="refreshBtn" class="btn primary">Refresh Configurations</button>
                 <button id="checkRepoBtn" class="btn">Check Repository Status</button>
                 <button id="addConfigBtn" class="btn">Add New Configuration</button>
+            </div>
+
+            <!-- Last Changed Accordion -->
+            <div id="lastChangedAccordion" class="last-changed-accordion" style="display: none;">
+                <div class="last-changed-header" onclick="toggleLastChangedAccordion()">
+                    <span class="last-changed-title">Last Configuration Change</span>
+                    <span class="last-changed-chevron">▶</span>
+                </div>
+                <div class="last-changed-content">
+                    <div class="last-changed-details">
+                        <div id="lastChangedItem" class="last-changed-item">
+                            <!-- Content will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
             </div>
 
     <div id="loadingState" class="loading">
@@ -1204,6 +1444,7 @@ export class RepoRigMainWebviewProvider {
             
             updateStatus(data);
             renderConfigs();
+            updateLastChangedAccordion(data.latestChange);
             hideLoading();
         }
 
@@ -1325,6 +1566,44 @@ export class RepoRigMainWebviewProvider {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // Last Changed Accordion Functions
+        function toggleLastChangedAccordion() {
+            const accordion = document.getElementById('lastChangedAccordion');
+            accordion.classList.toggle('expanded');
+        }
+
+        function updateLastChangedAccordion(latestChange) {
+            const accordion = document.getElementById('lastChangedAccordion');
+            const itemContainer = document.getElementById('lastChangedItem');
+            
+            if (!latestChange) {
+                accordion.style.display = 'none';
+                return;
+            }
+
+            accordion.style.display = 'block';
+            
+            const actionClass = \`change-action-\${latestChange.action}\`;
+            const valueDisplay = latestChange.action === 'deleted' 
+                ? \`<span class="change-value deleted">Previously: \${escapeHtml(latestChange.value || 'N/A')}</span>\`
+                : \`<span class="change-value">\${escapeHtml(latestChange.value || 'N/A')}</span>\`;
+
+            itemContainer.innerHTML = \`
+                <div class="change-action-badge \${actionClass}">\${latestChange.action}</div>
+                <div class="change-info">
+                    <div class="change-key">\${escapeHtml(latestChange.key)}</div>
+                    \${valueDisplay}
+                    <div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 2px;">
+                        \${latestChange.scope} scope
+                    </div>
+                </div>
+                <div class="change-timestamp">
+                    <div>\${latestChange.date}</div>
+                    <div>\${latestChange.time}</div>
+                </div>
+            \`;
         }
 
         // Hook management functions
