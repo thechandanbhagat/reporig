@@ -433,13 +433,30 @@ export class RepoRigMainWebviewProvider {
             word-break: break-all;
         }
 
-        .config-description {
-            font-family: var(--vscode-font-family);
-            font-size: 13px;
+        .key-with-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .info-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: help;
             color: var(--vscode-descriptionForeground);
-            font-style: italic;
-            max-width: 200px;
-            word-wrap: break-word;
+            opacity: 0.7;
+            transition: opacity 0.2s ease;
+        }
+
+        .info-icon:hover {
+            opacity: 1;
+            color: var(--vscode-foreground);
+        }
+
+        .info-icon svg {
+            width: 14px;
+            height: 14px;
         }
 
         .actions {
@@ -599,7 +616,6 @@ export class RepoRigMainWebviewProvider {
                     <tr>
                         <th>Configuration Key</th>
                         <th>Value</th>
-                        <th>Description</th>
                         <th>Scope</th>
                         <th>Actions</th>
                     </tr>
@@ -755,9 +771,19 @@ export class RepoRigMainWebviewProvider {
 
             configTableBody.innerHTML = configs.map(config => 
                 \`<tr>
-                    <td class="config-key">\${escapeHtml(config.key)}</td>
+                    <td class="config-key">
+                        <div class="key-with-info">
+                            \${escapeHtml(config.key)}
+                            <span class="info-icon" title="\${escapeHtml(config.description || 'Git configuration option')}">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.2" fill="none"/>
+                                    <path d="M8 7v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                                    <circle cx="8" cy="5" r="0.8" fill="currentColor"/>
+                                </svg>
+                            </span>
+                        </div>
+                    </td>
                     <td class="config-value">\${escapeHtml(config.value)}</td>
-                    <td class="config-description">\${escapeHtml(config.description || 'Git configuration option')}</td>
                     <td><span class="scope-badge scope-\${config.scope}">\${config.scope}</span></td>
                     <td>
                         <div class="actions">
