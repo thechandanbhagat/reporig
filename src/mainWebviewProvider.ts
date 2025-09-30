@@ -1018,6 +1018,224 @@ export class RepoRigMainWebviewProvider {
             margin-top: 4px;
         }
 
+        /* Enhanced Template Styles */
+        .template-category {
+            margin-bottom: 24px;
+        }
+
+        .template-category-title {
+            color: var(--vscode-foreground);
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--vscode-panel-border);
+        }
+
+        .template-category-items {
+            display: grid;
+            gap: 12px;
+        }
+
+        .template-item {
+            padding: 16px;
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 8px;
+            margin-bottom: 0;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background-color: var(--vscode-input-background);
+        }
+
+        .template-item:hover {
+            background-color: var(--vscode-list-hoverBackground);
+            border-color: var(--vscode-terminal-ansiBlue);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .template-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .template-name {
+            font-weight: 600;
+            color: var(--vscode-foreground);
+            font-size: 14px;
+        }
+
+        .template-category-badge {
+            background-color: var(--vscode-terminal-ansiBlue);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .template-description {
+            color: var(--vscode-descriptionForeground);
+            font-size: 13px;
+            margin: 8px 0;
+            line-height: 1.4;
+        }
+
+        .template-preview {
+            background-color: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 4px;
+            padding: 8px;
+            margin-top: 8px;
+        }
+
+        .template-preview code {
+            font-family: var(--vscode-editor-font-family);
+            font-size: 11px;
+            color: var(--vscode-editor-foreground);
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        /* Hook-specific template styles */
+        .templates-header {
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--vscode-panel-border);
+        }
+
+        .templates-header h4 {
+            color: var(--vscode-foreground);
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .templates-header p {
+            color: var(--vscode-descriptionForeground);
+            font-size: 13px;
+        }
+
+        .template-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .template-select-btn {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            transition: all 0.2s ease;
+        }
+
+        .template-item:hover .template-select-btn {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+
+        .no-templates-message {
+            text-align: center;
+            padding: 24px;
+            color: var(--vscode-descriptionForeground);
+            background-color: var(--vscode-input-background);
+            border: 1px dashed var(--vscode-panel-border);
+            border-radius: 8px;
+        }
+
+        .no-templates-message p {
+            margin-bottom: 8px;
+        }
+
+        .no-templates-message strong {
+            color: var(--vscode-foreground);
+        }
+
+        /* Inline template styles */
+        .hook-content-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .hook-content-header label {
+            margin-bottom: 0;
+        }
+
+        .template-btn {
+            background-color: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border: 1px solid var(--vscode-button-border);
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .template-btn:hover {
+            background-color: var(--vscode-button-secondaryHoverBackground);
+        }
+
+        .templates-header-inline {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--vscode-panel-border);
+        }
+
+        .templates-header-inline h4 {
+            margin: 0;
+            color: var(--vscode-foreground);
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .close-templates {
+            background-color: transparent;
+            color: var(--vscode-descriptionForeground);
+            border: none;
+            padding: 4px 8px;
+            font-size: 11px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .close-templates:hover {
+            background-color: var(--vscode-list-hoverBackground);
+            color: var(--vscode-foreground);
+        }
+
+        .hook-templates {
+            background-color: var(--vscode-input-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 16px;
+            animation: slideDown 0.2s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
         /* Last Changed Accordion Styles */
         .last-changed-accordion {
             margin: 16px 0;
@@ -1228,7 +1446,6 @@ export class RepoRigMainWebviewProvider {
             <div class="controls">
                 <button id="refreshHooksBtn" class="btn primary">Refresh Hooks</button>
                 <button id="addHookBtn" class="btn">Create New Hook</button>
-                <button id="loadTemplatesBtn" class="btn">Load Templates</button>
             </div>
 
             <div id="hooksLoadingState" class="loading" style="display: none;">
@@ -1263,21 +1480,29 @@ export class RepoRigMainWebviewProvider {
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="hookContent">Hook Content</label>
+                    <div class="hook-content-header">
+                        <label for="hookContent">Hook Content</label>
+                        <button id="loadTemplatesBtn" class="btn template-btn">📋 Load Templates</button>
+                    </div>
                     <textarea id="hookContent" placeholder="Enter your hook script content here..."></textarea>
                 </div>
-                <div class="form-buttons">
-                    <button id="saveHookBtn" class="btn primary">Save Hook</button>
-                    <button id="cancelHookBtn" class="btn">Cancel</button>
-                </div>
                 
-                <!-- Hook Templates -->
+                <!-- Hook Templates (inline) -->
                 <div id="hookTemplates" class="hook-templates" style="display: none;">
-                    <h4>Available Templates</h4>
+                    <div class="templates-header-inline">
+                        <h4>Select a Template</h4>
+                        <button id="closeTemplatesBtn" class="btn close-templates">✕ Close</button>
+                    </div>
                     <div id="templatesContainer">
                         <!-- Templates will be populated here -->
                     </div>
                 </div>
+                
+                <div class="form-buttons">
+                    <button id="saveHookBtn" class="btn primary">Save Hook</button>
+                    <button id="cancelHookBtn" class="btn">Cancel</button>
+                </div>
+
             </div>
         </div> <!-- End Hooks Tab -->
 
@@ -1377,6 +1602,19 @@ export class RepoRigMainWebviewProvider {
         loadTemplatesBtn.addEventListener('click', () => {
             vscode.postMessage({ type: 'getHookTemplates' });
             hookTemplates.style.display = 'block';
+        });
+
+        // Close templates button
+        const closeTemplatesBtn = document.getElementById('closeTemplatesBtn');
+        closeTemplatesBtn.addEventListener('click', () => {
+            hookTemplates.style.display = 'none';
+        });
+
+        // Filter templates when hook type changes
+        hookNameSelect.addEventListener('change', () => {
+            if (hookTemplates.style.display === 'block' && availableTemplates.length > 0) {
+                filterAndDisplayTemplates();
+            }
         });
 
         saveHookBtn.addEventListener('click', () => {
@@ -1706,12 +1944,55 @@ export class RepoRigMainWebviewProvider {
 
         function handleHookTemplates(templates) {
             availableTemplates = templates;
-            templatesContainer.innerHTML = templates.map(template => 
-                \`<div class="template-item" onclick="useTemplate('\${escapeHtml(template.name)}')">
-                    <div class="template-name">\${escapeHtml(template.name)}</div>
-                    <div class="template-description">\${escapeHtml(template.description)}</div>
-                </div>\`
-            ).join('');
+            filterAndDisplayTemplates();
+        }
+
+        function filterAndDisplayTemplates() {
+            const selectedHookType = hookNameSelect.value;
+            
+            // Filter templates based on selected hook type
+            const filteredTemplates = availableTemplates.filter(template => 
+                template.category === selectedHookType
+            );
+
+            if (filteredTemplates.length === 0) {
+                templatesContainer.innerHTML = \`
+                    <div class="no-templates-message">
+                        <p>No templates available for <strong>\${selectedHookType}</strong> hook type.</p>
+                        <p>You can still write your own hook script in the text area above.</p>
+                    </div>
+                \`;
+                return;
+            }
+
+            // Render only templates for the selected hook type
+            const templateHtml = filteredTemplates.map(template => {
+                const templateName = template.name.split('-').slice(1).join(' ').replace(/\b\w/g, l => l.toUpperCase());
+                
+                return \`
+                    <div class="template-item" onclick="useTemplate('\${escapeHtml(template.name)}')">
+                        <div class="template-header">
+                            <div class="template-name">\${escapeHtml(templateName)}</div>
+                            <div class="template-select-btn">Select</div>
+                        </div>
+                        <div class="template-description">\${escapeHtml(template.description.split(': ').slice(1).join(': '))}</div>
+                        <div class="template-preview">
+                            <code>\${escapeHtml(template.content.split('\\n').slice(0, 4).join('\\n'))}\${template.content.split('\\n').length > 4 ? '\\n...' : ''}</code>
+                        </div>
+                    </div>
+                \`;
+            }).join('');
+
+            const hookDisplayName = selectedHookType.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            templatesContainer.innerHTML = \`
+                <div class="templates-header">
+                    <h4>\${hookDisplayName} Hook Templates</h4>
+                    <p>Select a template to populate the hook content automatically:</p>
+                </div>
+                <div class="template-list">
+                    \${templateHtml}
+                </div>
+            \`;
         }
 
         function useTemplate(templateName) {
@@ -1719,6 +2000,8 @@ export class RepoRigMainWebviewProvider {
             if (template) {
                 hookContentTextarea.value = template.content;
                 hookTemplates.style.display = 'none';
+                const templateDisplayName = template.name.split('-').slice(1).join(' ');
+                showMessage('Template "' + templateDisplayName + '" loaded successfully!', 'success');
             }
         }
 
