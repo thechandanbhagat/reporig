@@ -528,27 +528,6 @@ export class RepoRigWebviewProvider implements vscode.WebviewViewProvider {
 
     <div id="messages"></div>
 
-    <div id="loadingState" class="loading">
-        <div>Loading git configurations...</div>
-    </div>
-
-    <div id="configContainer" style="display: none;">
-        <div class="config-table">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Key</th>
-                        <th>Value</th>
-                        <th>Scope</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="configTableBody">
-                </tbody>
-            </table>
-        </div>
-    </div>
-
     <div id="emptyState" class="empty-state" style="display: none;">
         <h3>No Git Configurations Found</h3>
         <p>Add some configurations to get started!</p>
