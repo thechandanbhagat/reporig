@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { RepoRigWebviewProvider } from './webviewProvider';
 import { getGitConfigDescription } from './gitConfigDescriptions';
+import { GitHooksManager, GitHook, HookTemplate } from './gitHooksManager';
 
 export class RepoRigMainWebviewProvider {
     private static currentPanel: vscode.WebviewPanel | undefined;
@@ -73,6 +74,21 @@ export class RepoRigMainWebviewProvider {
                 break;
             case 'checkGitRepo':
                 await this.checkGitRepository(webview);
+                break;
+            case 'loadHooks':
+                await this.loadAndSendHooks(webview);
+                break;
+            case 'createHook':
+                await this.createHook(webview, message.hookName, message.content);
+                break;
+            case 'editHook':
+                await this.editHook(webview, message.hookName, message.content);
+                break;
+            case 'deleteHook':
+                await this.deleteHook(webview, message.hookName);
+                break;
+            case 'getHookTemplates':
+                await this.getHookTemplates(webview);
                 break;
         }
     }
@@ -253,6 +269,162 @@ export class RepoRigMainWebviewProvider {
         }
 
         return configs;
+    }
+
+    private static async loadAndSendHooks(webview: vscode.Webview) {
+        try {
+            const workspaceRoot = await this.getWorkspaceRoot();
+            if (!workspaceRoot) {
+                webview.postMessage({
+                    type: 'error',
+                    message: 'No workspace folder is open'
+                });
+                return;
+            }
+
+            const isGitRepo = await this.isGitRepository(workspaceRoot);
+            if (!isGitRepo) {
+                webview.postMessage({
+                    type: 'hooks',
+                    data: {
+                        hooks: [],
+                        isGitRepo: false,
+                        workspaceRoot
+                    }
+                });
+                return;
+            }
+
+            const hooksManager = new GitHooksManager(workspaceRoot);
+            const hooks = await hooksManager.getAllHooks();
+
+            webview.postMessage({
+                type: 'hooks',
+                data: {
+                    hooks,
+                    isGitRepo,
+                    workspaceRoot
+                }
+            });
+        } catch (error) {
+            webview.postMessage({
+                type: 'error',
+                message: `Failed to load git hooks: ${error}`
+            });
+        }
+    }
+
+    private static async createHook(webview: vscode.Webview, hookName: string, content: string) {
+        try {
+            const workspaceRoot = await this.getWorkspaceRoot();
+            if (!workspaceRoot) {
+                webview.postMessage({
+                    type: 'error',
+                    message: 'No workspace folder is open'
+                });
+                return;
+            }
+
+            const hooksManager = new GitHooksManager(workspaceRoot);
+            await hooksManager.createOrUpdateHook(hookName, content);
+
+            webview.postMessage({
+                type: 'success',
+                message: `Git hook '${hookName}' created successfully`
+            });
+
+            // Reload hooks
+            await this.loadAndSendHooks(webview);
+        } catch (error) {
+            webview.postMessage({
+                type: 'error',
+                message: `Failed to create hook: ${error}`
+            });
+        }
+    }
+
+    private static async editHook(webview: vscode.Webview, hookName: string, content: string) {
+        try {
+            const workspaceRoot = await this.getWorkspaceRoot();
+            if (!workspaceRoot) {
+                webview.postMessage({
+                    type: 'error',
+                    message: 'No workspace folder is open'
+                });
+                return;
+            }
+
+            const hooksManager = new GitHooksManager(workspaceRoot);
+            await hooksManager.createOrUpdateHook(hookName, content);
+
+            webview.postMessage({
+                type: 'success',
+                message: `Git hook '${hookName}' updated successfully`
+            });
+
+            // Reload hooks
+            await this.loadAndSendHooks(webview);
+        } catch (error) {
+            webview.postMessage({
+                type: 'error',
+                message: `Failed to update hook: ${error}`
+            });
+        }
+    }
+
+    private static async deleteHook(webview: vscode.Webview, hookName: string) {
+        try {
+            const workspaceRoot = await this.getWorkspaceRoot();
+            if (!workspaceRoot) {
+                webview.postMessage({
+                    type: 'error',
+                    message: 'No workspace folder is open'
+                });
+                return;
+            }
+
+            const hooksManager = new GitHooksManager(workspaceRoot);
+            await hooksManager.deleteHook(hookName);
+
+            webview.postMessage({
+                type: 'success',
+                message: `Git hook '${hookName}' deleted successfully`
+            });
+
+            // Reload hooks
+            await this.loadAndSendHooks(webview);
+        } catch (error) {
+            webview.postMessage({
+                type: 'error',
+                message: `Failed to delete hook: ${error}`
+            });
+        }
+    }
+
+    private static async getHookTemplates(webview: vscode.Webview) {
+        try {
+            const workspaceRoot = await this.getWorkspaceRoot();
+            if (!workspaceRoot) {
+                webview.postMessage({
+                    type: 'error',
+                    message: 'No workspace folder is open'
+                });
+                return;
+            }
+
+            const hooksManager = new GitHooksManager(workspaceRoot);
+            const templates = hooksManager.getHookTemplates();
+
+            webview.postMessage({
+                type: 'hookTemplates',
+                data: templates
+            });
+        } catch (error) {
+            webview.postMessage({
+                type: 'error',
+                message: `Failed to load hook templates: ${error}`
+            });
+        }
     }
 
     private static getWebviewContent(webview: vscode.Webview): string {
@@ -589,6 +761,151 @@ export class RepoRigMainWebviewProvider {
                 gap: 16px;
             }
         }
+
+        /* Tab styles */
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid var(--vscode-panel-border);
+            margin-bottom: 24px;
+        }
+
+        .tab {
+            padding: 16px 24px;
+            background: transparent;
+            border: none;
+            color: var(--vscode-descriptionForeground);
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .tab:hover {
+            color: var(--vscode-foreground);
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .tab.active {
+            color: var(--vscode-foreground);
+            border-bottom-color: var(--vscode-terminal-ansiBlue);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Hook specific styles */
+        .hook-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+            border: 2px solid var(--vscode-panel-border);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            background-color: var(--vscode-editor-background);
+        }
+
+        .hook-info {
+            flex: 1;
+        }
+
+        .hook-name {
+            font-family: var(--vscode-editor-font-family);
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--vscode-terminal-ansiCyan);
+        }
+
+        .hook-description {
+            color: var(--vscode-descriptionForeground);
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        .hook-status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-top: 8px;
+        }
+
+        .hook-status.exists {
+            background-color: var(--vscode-terminal-ansiGreen);
+            color: var(--vscode-terminal-background);
+        }
+
+        .hook-status.missing {
+            background-color: var(--vscode-terminal-ansiYellow);
+            color: var(--vscode-terminal-background);
+        }
+
+        .hook-actions {
+            display: flex;
+            gap: 8px;
+            flex-direction: column;
+        }
+
+        .hook-editor {
+            margin-top: 24px;
+            padding: 24px;
+            border: 2px solid var(--vscode-panel-border);
+            border-radius: 8px;
+            background-color: var(--vscode-input-background);
+            display: none;
+        }
+
+        .hook-editor.active {
+            display: block;
+        }
+
+        .hook-editor textarea {
+            width: 100%;
+            min-height: 300px;
+            padding: 12px;
+            border: 1px solid var(--vscode-input-border);
+            background-color: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            font-family: var(--vscode-editor-font-family);
+            font-size: 14px;
+            border-radius: 4px;
+        }
+
+        .hook-templates {
+            margin-top: 16px;
+        }
+
+        .template-item {
+            padding: 12px;
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .template-item:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .template-name {
+            font-weight: 600;
+            color: var(--vscode-foreground);
+        }
+
+        .template-description {
+            color: var(--vscode-descriptionForeground);
+            font-size: 12px;
+            margin-top: 4px;
+        }
     </style>
 </head>
 <body>
@@ -599,11 +916,20 @@ export class RepoRigMainWebviewProvider {
             </div>
         </div>
 
-        <div class="controls">
-            <button id="refreshBtn" class="btn primary">Refresh Configurations</button>
-            <button id="checkRepoBtn" class="btn">Check Repository Status</button>
-            <button id="addConfigBtn" class="btn">Add New Configuration</button>
-        </div>    <div id="messages"></div>
+        <div class="tabs">
+            <button class="tab active" data-tab="config">Git Configurations</button>
+            <button class="tab" data-tab="hooks">Git Hooks</button>
+        </div>
+
+        <div id="messages"></div>
+
+        <!-- Git Config Tab Content -->
+        <div id="config-tab" class="tab-content active">
+            <div class="controls">
+                <button id="refreshBtn" class="btn primary">Refresh Configurations</button>
+                <button id="checkRepoBtn" class="btn">Check Repository Status</button>
+                <button id="addConfigBtn" class="btn">Add New Configuration</button>
+            </div>
 
     <div id="loadingState" class="loading">
         <div>Loading git configurations...</div>
@@ -655,13 +981,72 @@ export class RepoRigMainWebviewProvider {
             <button id="cancelConfigBtn" class="btn">Cancel</button>
         </div>
     </div>
+        </div> <!-- End Config Tab -->
+
+        <!-- Git Hooks Tab Content -->
+        <div id="hooks-tab" class="tab-content">
+            <div class="controls">
+                <button id="refreshHooksBtn" class="btn primary">Refresh Hooks</button>
+                <button id="addHookBtn" class="btn">Create New Hook</button>
+                <button id="loadTemplatesBtn" class="btn">Load Templates</button>
+            </div>
+
+            <div id="hooksLoadingState" class="loading" style="display: none;">
+                <div>Loading git hooks...</div>
+            </div>
+
+            <div id="hooksContainer" style="display: none;">
+                <div id="hooksListContainer">
+                    <!-- Hooks will be populated here -->
+                </div>
+            </div>
+
+            <div id="hooksEmptyState" class="empty-state" style="display: none;">
+                <h3>No Git Repository Found</h3>
+                <p>Git hooks are only available in git repositories.</p>
+            </div>
+
+            <!-- Hook Editor -->
+            <div id="hookEditor" class="hook-editor">
+                <h3 id="hookEditorTitle">Edit Hook</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="hookName">Hook Name</label>
+                        <select id="hookName">
+                            <option value="pre-commit">pre-commit</option>
+                            <option value="post-commit">post-commit</option>
+                            <option value="pre-push">pre-push</option>
+                            <option value="commit-msg">commit-msg</option>
+                            <option value="pre-receive">pre-receive</option>
+                            <option value="post-receive">post-receive</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="hookContent">Hook Content</label>
+                    <textarea id="hookContent" placeholder="Enter your hook script content here..."></textarea>
+                </div>
+                <div class="form-buttons">
+                    <button id="saveHookBtn" class="btn primary">Save Hook</button>
+                    <button id="cancelHookBtn" class="btn">Cancel</button>
+                </div>
+                
+                <!-- Hook Templates -->
+                <div id="hookTemplates" class="hook-templates" style="display: none;">
+                    <h4>Available Templates</h4>
+                    <div id="templatesContainer">
+                        <!-- Templates will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div> <!-- End Hooks Tab -->
 
     <script>
         const vscode = acquireVsCodeApi();
         let configs = [];
         let isGitRepo = false;
 
-        // DOM Elements
+        // DOM Elements - Config Tab
         const refreshBtn = document.getElementById('refreshBtn');
         const checkRepoBtn = document.getElementById('checkRepoBtn');
         const addConfigBtn = document.getElementById('addConfigBtn');
@@ -673,6 +1058,32 @@ export class RepoRigMainWebviewProvider {
         const configTableBody = document.getElementById('configTableBody');
         const addConfigForm = document.getElementById('addConfigForm');
         const saveConfigBtn = document.getElementById('saveConfigBtn');
+
+        // DOM Elements - Hooks Tab
+        const refreshHooksBtn = document.getElementById('refreshHooksBtn');
+        const addHookBtn = document.getElementById('addHookBtn');
+        const loadTemplatesBtn = document.getElementById('loadTemplatesBtn');
+        const hooksLoadingState = document.getElementById('hooksLoadingState');
+        const hooksContainer = document.getElementById('hooksContainer');
+        const hooksEmptyState = document.getElementById('hooksEmptyState');
+        const hooksListContainer = document.getElementById('hooksListContainer');
+        const hookEditor = document.getElementById('hookEditor');
+        const hookEditorTitle = document.getElementById('hookEditorTitle');
+        const hookNameSelect = document.getElementById('hookName');
+        const hookContentTextarea = document.getElementById('hookContent');
+        const saveHookBtn = document.getElementById('saveHookBtn');
+        const cancelHookBtn = document.getElementById('cancelHookBtn');
+        const hookTemplates = document.getElementById('hookTemplates');
+        const templatesContainer = document.getElementById('templatesContainer');
+
+        // Tab navigation
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        // Hook management variables
+        let hooks = [];
+        let currentEditingHook = null;
+        let availableTemplates = [];
         const cancelConfigBtn = document.getElementById('cancelConfigBtn');
 
         // Event Listeners
@@ -713,6 +1124,52 @@ export class RepoRigMainWebviewProvider {
             hideAddConfigForm();
         });
 
+        // Hook Event Listeners
+        refreshHooksBtn.addEventListener('click', () => {
+            vscode.postMessage({ type: 'loadHooks' });
+            showHooksLoading();
+        });
+
+        addHookBtn.addEventListener('click', () => {
+            showHookEditor();
+        });
+
+        loadTemplatesBtn.addEventListener('click', () => {
+            vscode.postMessage({ type: 'getHookTemplates' });
+            hookTemplates.style.display = 'block';
+        });
+
+        saveHookBtn.addEventListener('click', () => {
+            const hookName = hookNameSelect.value;
+            const content = hookContentTextarea.value.trim();
+
+            if (!content) {
+                showMessage('Please enter hook content', 'error');
+                return;
+            }
+
+            const messageType = currentEditingHook ? 'editHook' : 'createHook';
+            vscode.postMessage({
+                type: messageType,
+                hookName,
+                content
+            });
+
+            hideHookEditor();
+        });
+
+        cancelHookBtn.addEventListener('click', () => {
+            hideHookEditor();
+        });
+
+        // Tab switching
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetTab = tab.dataset.tab;
+                switchTab(targetTab);
+            });
+        });
+
         // Message handler
         window.addEventListener('message', event => {
             const message = event.data;
@@ -731,6 +1188,12 @@ export class RepoRigMainWebviewProvider {
                 case 'gitRepoStatus':
                     updateStatus(message.data);
                     showMessage(message.data.message, message.data.isGitRepo ? 'success' : 'error');
+                    break;
+                case 'hooks':
+                    handleHooksData(message.data);
+                    break;
+                case 'hookTemplates':
+                    handleHookTemplates(message.data);
                     break;
             }
         });
@@ -863,6 +1326,137 @@ export class RepoRigMainWebviewProvider {
             div.textContent = text;
             return div.innerHTML;
         }
+
+        // Hook management functions
+        function switchTab(tabName) {
+            // Remove active class from all tabs and contents
+            tabs.forEach(tab => tab.classList.remove('active'));
+            tabContents.forEach(content => content.classList.remove('active'));
+
+            // Add active class to clicked tab and corresponding content
+            document.querySelector(\`[data-tab="\${tabName}"]\`).classList.add('active');
+            document.getElementById(\`\${tabName}-tab\`).classList.add('active');
+
+            // Load data for the active tab
+            if (tabName === 'hooks') {
+                vscode.postMessage({ type: 'loadHooks' });
+            }
+        }
+
+        function handleHooksData(data) {
+            hooks = data.hooks;
+            isGitRepo = data.isGitRepo;
+
+            hideHooksLoading();
+
+            if (!isGitRepo) {
+                hooksContainer.style.display = 'none';
+                hooksEmptyState.style.display = 'block';
+                return;
+            }
+
+            if (hooks.length === 0) {
+                hooksContainer.style.display = 'none';
+                hooksEmptyState.style.display = 'block';
+            } else {
+                hooksEmptyState.style.display = 'none';
+                hooksContainer.style.display = 'block';
+                renderHooks();
+            }
+        }
+
+        function renderHooks() {
+            hooksListContainer.innerHTML = hooks.map(hook => 
+                \`<div class="hook-item">
+                    <div class="hook-info">
+                        <div class="hook-name">\${escapeHtml(hook.name)}</div>
+                        <div class="hook-description">\${escapeHtml(hook.description)}</div>
+                        <div class="hook-status \${hook.exists ? 'exists' : 'missing'}">
+                            \${hook.exists ? 'EXISTS' : 'MISSING'}
+                        </div>
+                    </div>
+                    <div class="hook-actions">
+                        <button class="btn btn-small btn-edit" onclick="editHook('\${escapeHtml(hook.name)}')">
+                            \${hook.exists ? 'Edit' : 'Create'}
+                        </button>
+                        \${hook.exists ? \`<button class="btn btn-small btn-delete" onclick="deleteHook('\${escapeHtml(hook.name)}')">Delete</button>\` : ''}
+                    </div>
+                </div>\`
+            ).join('');
+        }
+
+        function showHookEditor(hookName = null) {
+            currentEditingHook = hookName;
+            
+            if (hookName) {
+                const hook = hooks.find(h => h.name === hookName);
+                hookEditorTitle.textContent = \`Edit Hook: \${hookName}\`;
+                hookNameSelect.value = hookName;
+                hookNameSelect.disabled = true;
+                hookContentTextarea.value = hook ? hook.content || '' : '';
+            } else {
+                hookEditorTitle.textContent = 'Create New Hook';
+                hookNameSelect.disabled = false;
+                hookContentTextarea.value = '';
+            }
+
+            hookEditor.classList.add('active');
+            hookContentTextarea.focus();
+        }
+
+        function hideHookEditor() {
+            hookEditor.classList.remove('active');
+            hookTemplates.style.display = 'none';
+            currentEditingHook = null;
+            hookNameSelect.disabled = false;
+            hookContentTextarea.value = '';
+        }
+
+        function editHook(hookName) {
+            showHookEditor(hookName);
+        }
+
+        function deleteHook(hookName) {
+            if (confirm(\`Are you sure you want to delete the '\${hookName}' hook?\`)) {
+                vscode.postMessage({
+                    type: 'deleteHook',
+                    hookName
+                });
+            }
+        }
+
+        function handleHookTemplates(templates) {
+            availableTemplates = templates;
+            templatesContainer.innerHTML = templates.map(template => 
+                \`<div class="template-item" onclick="useTemplate('\${escapeHtml(template.name)}')">
+                    <div class="template-name">\${escapeHtml(template.name)}</div>
+                    <div class="template-description">\${escapeHtml(template.description)}</div>
+                </div>\`
+            ).join('');
+        }
+
+        function useTemplate(templateName) {
+            const template = availableTemplates.find(t => t.name === templateName);
+            if (template) {
+                hookContentTextarea.value = template.content;
+                hookTemplates.style.display = 'none';
+            }
+        }
+
+        function showHooksLoading() {
+            hooksLoadingState.style.display = 'block';
+            hooksContainer.style.display = 'none';
+            hooksEmptyState.style.display = 'none';
+        }
+
+        function hideHooksLoading() {
+            hooksLoadingState.style.display = 'none';
+        }
+
+        // Make functions globally available
+        window.editHook = editHook;
+        window.deleteHook = deleteHook;
+        window.useTemplate = useTemplate;
 
         // Initial load
         vscode.postMessage({ type: 'loadConfigs' });
