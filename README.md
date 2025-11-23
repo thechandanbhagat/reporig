@@ -4,16 +4,36 @@
 
 RepoRig is a comprehensive VS Code extension that simplifies git configuration and hooks management directly within your workspace. Whether you're managing personal projects or enterprise repositories, RepoRig provides an intuitive interface to handle git settings, create powerful git hooks, and maintain consistent development workflows.
 
-## Who Is This For?
+## Why RepoRig?
 
 - **Centralized Management**: All git configurations and hooks in one place
 - **Instant Access**: No more command line hunting for git settings
+- **Configuration Profiles**: 🌟 **NEW!** Save and switch between different git configurations instantly
 - **Change Tracking**: Keep track of configuration changes with timestamps
 - **Hook Templates**: 20+ production-ready git hook examples
 - **Visual Interface**: Beautiful, responsive UI that works with VS Code themes
 - **Real-time Updates**: See changes immediately without reloading
+- **Team Collaboration**: Share configuration profiles across teams
 
 ## Features
+
+### 🎯 Configuration Profiles - NEW!
+**The ultimate time-saver for developers working on multiple projects!**
+
+- **Create Multiple Profiles**: Save different git configurations for Work, Personal, Open Source, Client projects
+- **One-Click Switching**: Apply entire configuration sets instantly
+- **Profile Templates**: Start with pre-configured profiles (Work, Personal, OSS, Client, Team Standard)
+- **Smart Comparison**: Preview changes before applying a profile
+- **Import/Export**: Share profiles with team members or across machines
+- **Visual Management**: Dedicated sidebar view with profile status indicators
+- **Current Config Capture**: Save your current settings as a new profile
+
+**Use Cases:**
+- 👔 **Work Profile**: Company email, GPG signing, specific line endings
+- 🏠 **Personal Profile**: Private email, relaxed settings
+- 🌐 **Open Source**: Public GitHub email, contribution settings
+- 👥 **Client Profiles**: Different identities for different clients
+- 🤝 **Team Standards**: Share standardized settings across your team
 
 ### Git Configuration Management
 - **Smart Repository Detection**: Automatically detects git repositories in your workspace
@@ -40,6 +60,16 @@ RepoRig is a comprehensive VS Code extension that simplifies git configuration a
 - **Dynamic Updates**: Templates update automatically when switching hook types
 
 ### Commands Available
+
+#### Configuration Profile Commands 🌟
+- `RepoRig: Create Configuration Profile` - Create a new profile from templates
+- `RepoRig: Save Current Config as Profile` - Capture current settings as a profile
+- `RepoRig: Apply Configuration Profile` - Switch to a different profile instantly
+- `RepoRig: Compare Profile with Current` - Preview changes before applying
+- `RepoRig: Export Profile` - Save profile as JSON file for sharing
+- `RepoRig: Import Profile` - Load a profile from JSON file
+- `RepoRig: Edit Profile` - Modify profile name and description
+- `RepoRig: Delete Profile` - Remove a profile
 
 #### Git Configuration Commands
 - `RepoRig: Check Git Repository Status` - Verify if current workspace is a git repository
@@ -72,7 +102,23 @@ code --install-extension thechandanbhagat.reporig
 5. Use the "Edit" button to modify existing configurations
 6. Check the "Last Configuration Change" accordion for recent modifications
 
-### 4. Working with Git Hooks
+### 4. Working with Configuration Profiles 🌟
+**The fastest way to manage multiple identities!**
+
+1. Open the Source Control view in VS Code
+2. Find the "Configuration Profiles" panel
+3. Click the **+** icon to create a new profile
+4. Choose from templates: Work, Personal, Open Source, Client, or Team Standard
+5. Customize the configurations if needed
+6. Click on any profile to apply it instantly
+
+**Or save your current setup:**
+1. Configure your git settings as desired
+2. Run command: `RepoRig: Save Current Config as Profile`
+3. Give it a name (e.g., "Client A Settings")
+4. Your current configuration is now saved!
+
+### 5. Working with Git Hooks
 1. Switch to the "Git Hooks" tab in RepoRig
 2. Click "Create New Hook" to start
 3. Select your hook type (pre-commit, commit-msg, etc.)
@@ -81,6 +127,36 @@ code --install-extension thechandanbhagat.reporig
 6. Save and test your hook
 
 ## Usage Examples
+
+### 🔄 Switching Between Work and Personal Projects
+```bash
+# Working on company project - apply work profile:
+1. Open Source Control view
+2. Go to "Configuration Profiles" panel
+3. Click on "Work Profile"
+4. ✅ Automatically sets company email, GPG signing, and work settings
+
+# Later, switching to personal project:
+1. Click on "Personal Profile"
+2. ✅ Your personal email and settings are applied instantly!
+
+# No more manual git config commands! 🎉
+```
+
+### 💾 Saving and Sharing Team Standards
+```bash
+# Save your team's standard configuration:
+1. Configure git settings as per team standards
+2. Command Palette → "RepoRig: Save Current Config as Profile"
+3. Name it "Team Standard"
+4. Command Palette → "RepoRig: Export Profile"
+5. Share the .reporig.json file with team members
+
+# Team members import it:
+1. Command Palette → "RepoRig: Import Profile"
+2. Select the shared .reporig.json file
+3. ✅ Everyone has identical settings!
+```
 
 ### Setting Up a Pre-commit Hook
 ```bash

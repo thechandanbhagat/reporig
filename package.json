@@ -2,7 +2,7 @@
   "name": "reporig",
   "displayName": "Repo Rig",
   "description": "Rig up your repository configurations with ease - manage git settings, git hooks, detect repositories, and edit configurations directly in VS Code",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "thechandanbhagat",
   "icon": "media/icon.png",
   "repository": {
@@ -24,7 +24,7 @@
     "version control"
   ],
   "engines": {
-    "vscode": "^1.104.0"
+    "vscode": "^1.85.0"
   },
   "categories": [
     "SCM Providers",
@@ -97,6 +97,50 @@
       {
         "command": "reporig.viewHook",
         "title": "View Hook"
+      },
+      {
+        "command": "reporig.createProfile",
+        "title": "RepoRig: Create Configuration Profile",
+        "icon": "$(add)"
+      },
+      {
+        "command": "reporig.createProfileFromCurrent",
+        "title": "RepoRig: Save Current Config as Profile"
+      },
+      {
+        "command": "reporig.applyProfile",
+        "title": "RepoRig: Apply Configuration Profile",
+        "icon": "$(check)"
+      },
+      {
+        "command": "reporig.editProfile",
+        "title": "RepoRig: Edit Profile",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "reporig.deleteProfile",
+        "title": "RepoRig: Delete Profile",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "reporig.compareProfile",
+        "title": "RepoRig: Compare Profile with Current",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "reporig.exportProfile",
+        "title": "RepoRig: Export Profile",
+        "icon": "$(export)"
+      },
+      {
+        "command": "reporig.importProfile",
+        "title": "RepoRig: Import Profile",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "reporig.refreshProfiles",
+        "title": "RepoRig: Refresh Profiles",
+        "icon": "$(refresh)"
       }
     ],
     "views": {
@@ -121,6 +165,12 @@
           "name": "Git Hooks",
           "when": "reporig.isGitRepository",
           "icon": "$(symbol-event)"
+        },
+        {
+          "id": "reporig.configProfiles",
+          "name": "Configuration Profiles",
+          "when": "reporig.isGitRepository",
+          "icon": "$(symbol-folder)"
         }
       ]
     },
@@ -182,6 +232,21 @@
           "command": "reporig.createHook",
           "when": "view == reporig.gitHooks",
           "group": "navigation"
+        },
+        {
+          "command": "reporig.refreshProfiles",
+          "when": "view == reporig.configProfiles",
+          "group": "navigation@1"
+        },
+        {
+          "command": "reporig.createProfile",
+          "when": "view == reporig.configProfiles",
+          "group": "navigation@2"
+        },
+        {
+          "command": "reporig.importProfile",
+          "when": "view == reporig.configProfiles",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
@@ -204,6 +269,31 @@
           "command": "reporig.createHook",
           "when": "view == reporig.gitHooks && viewItem == missingHook",
           "group": "inline@1"
+        },
+        {
+          "command": "reporig.applyProfile",
+          "when": "view == reporig.configProfiles && viewItem == profile",
+          "group": "inline@1"
+        },
+        {
+          "command": "reporig.compareProfile",
+          "when": "view == reporig.configProfiles && viewItem == profile",
+          "group": "inline@2"
+        },
+        {
+          "command": "reporig.editProfile",
+          "when": "view == reporig.configProfiles && viewItem == profile",
+          "group": "inline@3"
+        },
+        {
+          "command": "reporig.exportProfile",
+          "when": "view == reporig.configProfiles && viewItem == profile",
+          "group": "context@1"
+        },
+        {
+          "command": "reporig.deleteProfile",
+          "when": "view == reporig.configProfiles && viewItem == profile",
+          "group": "context@2"
         }
       ]
     }
@@ -220,7 +310,7 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.104.0",
+    "@types/vscode": "^1.85.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
     "@typescript-eslint/eslint-plugin": "^8.42.0",

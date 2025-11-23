@@ -6,6 +6,7 @@ import { promisify } from 'util';
 import { RepoRigWebviewProvider } from './webviewProvider';
 import { RepoRigMainWebviewProvider } from './mainWebviewProvider';
 import { GitHooksProvider, GitHooksManager, GitHook, HookTemplate } from './gitHooksManager';
+import { ProfileManager, ProfileTreeProvider, ConfigProfile } from './profileManager';
 
 const execAsync = promisify(exec);
 
@@ -113,6 +114,14 @@ export async function activate(context: vscode.ExtensionContext) {
 			showCollapseAll: true
 		});
 	}
+
+	// Initialize configuration profiles manager
+	const profileManager = new ProfileManager(context);
+	const profileTreeProvider = new ProfileTreeProvider(profileManager);
+	vscode.window.createTreeView('reporig.configProfiles', {
+		treeDataProvider: profileTreeProvider,
+		showCollapseAll: true
+	});
 
 	// Check if workspace has git repository on startup
 	await checkAndSetGitContext();
@@ -476,7 +485,298 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 
 	const openMainViewCommand = vscode.commands.registerCommand('reporig.openMainView', () => {
-		RepoRigMainWebviewProvider.createOrShow(context.extensionUri);
+		RepoRigMainWebviewProvider.createOrShow(context.extensionUri, context);
+	});
+
+	// Profile Commands
+	const createProfileCommand = vscode.commands.registerCommand('reporig.createProfile', async () => {
+		const name = await vscode.window.showInputBox({
+			prompt: 'Enter profile name',
+			placeHolder: 'e.g., Work Profile, Personal, Client A',
+			validateInput: (value) => value ? null : 'Profile name is required'
+		});
+
+		if (!name) {
+			return;
+		}
+
+		const description = await vscode.window.showInputBox({
+			prompt: 'Enter profile description (optional)',
+			placeHolder: 'e.g., Company email and work settings'
+		});
+
+		try {
+			// Load profile templates
+			const templatesPath = path.join(context.extensionPath, 'src', 'profileTemplates.json');
+			const templatesData = fs.readFileSync(templatesPath, 'utf8');
+			const templates = JSON.parse(templatesData).templates;
+
+			const templateOptions = ['Empty Profile', ...templates.map((t: any) => `${t.name} - ${t.description}`)];
+			const selectedTemplate = await vscode.window.showQuickPick(templateOptions, {
+				placeHolder: 'Choose a template'
+			});
+
+			let configs = [];
+			if (selectedTemplate && selectedTemplate !== 'Empty Profile') {
+				const templateName = selectedTemplate.split(' - ')[0];
+				const template = templates.find((t: any) => t.name === templateName);
+				if (template) {
+					configs = template.configs;
+				}
+			}
+
+			const profile = profileManager.createProfile(name, description || '', configs);
+			vscode.window.showInformationMessage(`✅ Created profile: ${profile.name}`);
+			profileTreeProvider.refresh();
+		} catch (error) {
+			vscode.window.showErrorMessage(`❌ Failed to create profile: ${error}`);
+		}
+	});
+
+	const createProfileFromCurrentCommand = vscode.commands.registerCommand('reporig.createProfileFromCurrent', async () => {
+		const name = await vscode.window.showInputBox({
+			prompt: 'Enter profile name',
+			placeHolder: 'e.g., Current Project Settings',
+			validateInput: (value) => value ? null : 'Profile name is required'
+		});
+
+		if (!name) {
+			return;
+		}
+
+		const description = await vscode.window.showInputBox({
+			prompt: 'Enter profile description (optional)',
+			placeHolder: 'e.g., Settings for this project'
+		});
+
+		try {
+			const profile = await profileManager.createProfileFromCurrent(name, description || '');
+			vscode.window.showInformationMessage(`✅ Saved current configuration as profile: ${profile.name}`);
+			profileTreeProvider.refresh();
+		} catch (error) {
+			vscode.window.showErrorMessage(`❌ Failed to save profile: ${error}`);
+		}
+	});
+
+	const applyProfileCommand = vscode.commands.registerCommand('reporig.applyProfile', async (profileIdOrItem: string | any) => {
+		let profileId: string;
+		
+		if (typeof profileIdOrItem === 'string') {
+			profileId = profileIdOrItem;
+		} else if (profileIdOrItem && profileIdOrItem.profile) {
+			profileId = profileIdOrItem.profile.id;
+		} else {
+			// Show quick pick
+			const profiles = profileManager.getAllProfiles();
+			if (profiles.length === 0) {
+				vscode.window.showInformationMessage('No profiles available. Create one first!');
+				return;
+			}
+
+			const selected = await vscode.window.showQuickPick(
+				profiles.map(p => ({ label: p.name, description: p.description, profile: p })),
+				{ placeHolder: 'Select a profile to apply' }
+			);
+
+			if (!selected) {
+				return;
+			}
+			profileId = selected.profile.id;
+		}
+
+		try {
+			const comparison = await profileManager.compareProfiles(profileId);
+			const changesCount = comparison.toAdd.length + comparison.toUpdate.length + comparison.toRemove.length;
+
+			if (changesCount === 0) {
+				vscode.window.showInformationMessage('Profile is already applied. No changes needed.');
+				return;
+			}
+
+			const message = `This will make ${changesCount} change(s):\n` +
+				`- Add: ${comparison.toAdd.length}\n` +
+				`- Update: ${comparison.toUpdate.length}\n` +
+				`- Remove: ${comparison.toRemove.length}`;
+
+			const confirmation = await vscode.window.showWarningMessage(
+				message,
+				{ modal: true },
+				'Apply Profile'
+			);
+
+			if (confirmation === 'Apply Profile') {
+				await profileManager.applyProfile(profileId);
+				vscode.window.showInformationMessage(`✅ Applied profile successfully!`);
+				gitConfigProvider.refresh();
+				profileTreeProvider.refresh();
+			}
+		} catch (error) {
+			vscode.window.showErrorMessage(`❌ Failed to apply profile: ${error}`);
+		}
+	});
+
+	const editProfileCommand = vscode.commands.registerCommand('reporig.editProfile', async (item: any) => {
+		const profileId = item?.profile?.id;
+		if (!profileId) {
+			return;
+		}
+
+		const profile = profileManager.getProfile(profileId);
+		if (!profile) {
+			return;
+		}
+
+		const name = await vscode.window.showInputBox({
+			prompt: 'Enter new profile name',
+			value: profile.name,
+			validateInput: (value) => value ? null : 'Profile name is required'
+		});
+
+		if (!name) {
+			return;
+		}
+
+		const description = await vscode.window.showInputBox({
+			prompt: 'Enter new profile description',
+			value: profile.description
+		});
+
+		try {
+			profileManager.updateProfile(profileId, { name, description: description || '' });
+			vscode.window.showInformationMessage(`✅ Updated profile: ${name}`);
+			profileTreeProvider.refresh();
+		} catch (error) {
+			vscode.window.showErrorMessage(`❌ Failed to update profile: ${error}`);
+		}
+	});
+
+	const deleteProfileCommand = vscode.commands.registerCommand('reporig.deleteProfile', async (item: any) => {
+		const profileId = item?.profile?.id;
+		if (!profileId) {
+			return;
+		}
+
+		const profile = profileManager.getProfile(profileId);
+		if (!profile) {
+			return;
+		}
+
+		const confirmation = await vscode.window.showWarningMessage(
+			`Are you sure you want to delete the profile "${profile.name}"?`,
+			{ modal: true },
+			'Delete Profile'
+		);
+
+		if (confirmation === 'Delete Profile') {
+			try {
+				profileManager.deleteProfile(profileId);
+				vscode.window.showInformationMessage(`✅ Deleted profile: ${profile.name}`);
+				profileTreeProvider.refresh();
+			} catch (error) {
+				vscode.window.showErrorMessage(`❌ Failed to delete profile: ${error}`);
+			}
+		}
+	});
+
+	const compareProfileCommand = vscode.commands.registerCommand('reporig.compareProfile', async (item: any) => {
+		const profileId = item?.profile?.id;
+		if (!profileId) {
+			return;
+		}
+
+		const profile = profileManager.getProfile(profileId);
+		if (!profile) {
+			return;
+		}
+
+		try {
+			const comparison = await profileManager.compareProfiles(profileId);
+			
+			let message = `Comparison for "${profile.name}":\n\n`;
+			
+			if (comparison.toAdd.length > 0) {
+				message += `✚ To Add (${comparison.toAdd.length}):\n`;
+				comparison.toAdd.forEach(c => {
+					message += `  ${c.key} = ${c.value} [${c.scope}]\n`;
+				});
+				message += '\n';
+			}
+
+			if (comparison.toUpdate.length > 0) {
+				message += `↻ To Update (${comparison.toUpdate.length}):\n`;
+				comparison.toUpdate.forEach(c => {
+					message += `  ${c.key}: "${c.oldValue}" → "${c.newValue}" [${c.scope}]\n`;
+				});
+				message += '\n';
+			}
+
+			if (comparison.toRemove.length > 0) {
+				message += `✖ To Remove (${comparison.toRemove.length}):\n`;
+				comparison.toRemove.forEach(c => {
+					message += `  ${c.key} = ${c.value} [${c.scope}]\n`;
+				});
+			}
+
+			if (comparison.toAdd.length === 0 && comparison.toUpdate.length === 0 && comparison.toRemove.length === 0) {
+				message = `Profile "${profile.name}" matches current configuration. No changes needed.`;
+			}
+
+			vscode.window.showInformationMessage(message, { modal: true });
+		} catch (error) {
+			vscode.window.showErrorMessage(`❌ Failed to compare profile: ${error}`);
+		}
+	});
+
+	const exportProfileCommand = vscode.commands.registerCommand('reporig.exportProfile', async (item: any) => {
+		const profileId = item?.profile?.id;
+		if (!profileId) {
+			return;
+		}
+
+		const profile = profileManager.getProfile(profileId);
+		if (!profile) {
+			return;
+		}
+
+		try {
+			const jsonData = profileManager.exportProfile(profileId);
+			const uri = await vscode.window.showSaveDialog({
+				defaultUri: vscode.Uri.file(`${profile.name.replace(/\s+/g, '-').toLowerCase()}.reporig.json`),
+				filters: { 'RepoRig Profile': ['reporig.json', 'json'] }
+			});
+
+			if (uri) {
+				fs.writeFileSync(uri.fsPath, jsonData);
+				vscode.window.showInformationMessage(`✅ Exported profile to: ${uri.fsPath}`);
+			}
+		} catch (error) {
+			vscode.window.showErrorMessage(`❌ Failed to export profile: ${error}`);
+		}
+	});
+
+	const importProfileCommand = vscode.commands.registerCommand('reporig.importProfile', async () => {
+		try {
+			const uris = await vscode.window.showOpenDialog({
+				canSelectMany: false,
+				filters: { 'RepoRig Profile': ['reporig.json', 'json'] },
+				openLabel: 'Import Profile'
+			});
+
+			if (!uris || uris.length === 0) {
+				return;
+			}
+
+			const jsonData = fs.readFileSync(uris[0].fsPath, 'utf8');
+			const profile = profileManager.importProfile(jsonData);
+			vscode.window.showInformationMessage(`✅ Imported profile: ${profile.name}`);
+			profileTreeProvider.refresh();
+		} catch (error) {
+			vscode.window.showErrorMessage(`❌ Failed to import profile: ${error}`);
+		}
+	});
+
+	const refreshProfilesCommand = vscode.commands.registerCommand('reporig.refreshProfiles', () => {
+		profileTreeProvider.refresh();
 	});
 
 	// Register workspace folder change listener
@@ -486,6 +786,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		if (gitHooksProvider) {
 			gitHooksProvider.refresh();
 		}
+		profileTreeProvider.refresh();
 	});
 
 	context.subscriptions.push(
@@ -505,6 +806,16 @@ export async function activate(context: vscode.ExtensionContext) {
 		deleteHookCommand,
 		toggleHookCommand,
 		refreshHooksCommand,
+		// Profile Commands
+		createProfileCommand,
+		createProfileFromCurrentCommand,
+		applyProfileCommand,
+		editProfileCommand,
+		deleteProfileCommand,
+		compareProfileCommand,
+		exportProfileCommand,
+		importProfileCommand,
+		refreshProfilesCommand,
 		// Event Listeners
 		workspaceFoldersChangeListener
 	);

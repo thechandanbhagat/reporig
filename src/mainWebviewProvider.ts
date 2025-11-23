@@ -2,11 +2,18 @@ import * as vscode from 'vscode';
 import { RepoRigWebviewProvider } from './webviewProvider';
 import { getGitConfigDescription } from './gitConfigDescriptions';
 import { GitHooksManager, GitHook, HookTemplate } from './gitHooksManager';
+import { ProfileManager, ConfigProfile, GitConfigItem } from './profileManager';
 
 export class RepoRigMainWebviewProvider {
     private static currentPanel: vscode.WebviewPanel | undefined;
+    private static profileManager: ProfileManager | undefined;
 
-    public static createOrShow(extensionUri: vscode.Uri) {
+    public static createOrShow(extensionUri: vscode.Uri, context?: vscode.ExtensionContext) {
+        // Initialize ProfileManager if not already done
+        if (!this.profileManager && context) {
+            this.profileManager = new ProfileManager(context);
+        }
+
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
@@ -89,6 +96,33 @@ export class RepoRigMainWebviewProvider {
                 break;
             case 'getHookTemplates':
                 await this.getHookTemplates(webview);
+                break;
+            case 'loadProfiles':
+                await this.loadAndSendProfiles(webview);
+                break;
+            case 'createProfile':
+                await this.createProfile(webview, message.name, message.description, message.configs, message.tags);
+                break;
+            case 'createProfileFromCurrent':
+                await this.createProfileFromCurrent(webview, message.name, message.description, message.tags);
+                break;
+            case 'applyProfile':
+                await this.applyProfile(webview, message.profileId);
+                break;
+            case 'deleteProfile':
+                await this.deleteProfileItem(webview, message.profileId);
+                break;
+            case 'editProfile':
+                await this.editProfile(webview, message.profileId, message.name, message.description, message.tags);
+                break;
+            case 'updateProfileConfigs':
+                await this.updateProfileConfigs(webview, message.profileId, message.configs);
+                break;
+            case 'exportProfile':
+                await this.exportProfile(webview, message.profileId);
+                break;
+            case 'importProfile':
+                await this.importProfile(webview, message.jsonData);
                 break;
         }
     }
@@ -463,6 +497,220 @@ export class RepoRigMainWebviewProvider {
         }
     }
 
+    // Profile Management Methods
+    private static async loadAndSendProfiles(webview: vscode.Webview) {
+        try {
+            if (!this.profileManager) {
+                webview.postMessage({
+                    type: 'error',
+                    message: 'Profile manager not initialized'
+                });
+                return;
+            }
+
+            const profiles = this.profileManager.getAllProfiles();
+            const activeProfile = this.profileManager.getActiveProfile();
+
+            webview.postMessage({
+                type: 'profiles',
+                data: {
+                    profiles,
+                    activeProfileId: activeProfile?.id
+                }
+            });
+        } catch (error) {
+            webview.postMessage({
+                type: 'error',
+                message: `Failed to load profiles: ${error}`
+            });
+        }
+    }
+
+    private static async createProfile(webview: vscode.Webview, name: string, description: string, configs: GitConfigItem[], tags?: string[]) {
+        try {
+            if (!this.profileManager) {
+                throw new Error('Profile manager not initialized');
+            }
+
+            const profile = this.profileManager.createProfile(name, description, configs, tags);
+
+            webview.postMessage({
+                type: 'success',
+                message: `Profile '${name}' created successfully`
+            });
+
+            await this.loadAndSendProfiles(webview);
+        } catch (error) {
+            webview.postMessage({
+                type: 'error',
+                message: `Failed to create profile: ${error}`
+            });
+        }
+    }
+
+    private static async createProfileFromCurrent(webview: vscode.Webview, name: string, description: string, tags?: string[]) {
+        try {
+            if (!this.profileManager) {
+                throw new Error('Profile manager not initialized');
+            }
+
+            const workspaceRoot = await this.getWorkspaceRoot();
+            const profile = await this.profileManager.createProfileFromCurrent(name, description, tags);
+
+            webview.postMessage({
+                type: 'success',
+                message: `Profile '${name}' created from current configuration`
+            });
+
+            await this.loadAndSendProfiles(webview);
+        } catch (error) {
+            webview.postMessage({
+                type: 'error',
+                message: `Failed to create profile from current config: ${error}`
+            });
+        }
+    }
+
+    private static async applyProfile(webview: vscode.Webview, profileId: string) {
+        try {
+            if (!this.profileManager) {
+                throw new Error('Profile manager not initialized');
+            }
+
+            const workspaceRoot = await this.getWorkspaceRoot();
+            await this.profileManager.applyProfile(profileId, workspaceRoot);
+
+            const profile = this.profileManager.getProfile(profileId);
+            webview.postMessage({
+                type: 'success',
+                message: `Profile '${profile?.name}' applied successfully`
+            });
+
+            await this.loadAndSendProfiles(webview);
+            await this.loadAndSendConfigs(webview);
+        } catch (error) {
+            webview.postMessage({
+                type: 'error',
+                message: `Failed to apply profile: ${error}`
+            });
+        }
+    }
+
+    private static async deleteProfileItem(webview: vscode.Webview, profileId: string) {
+        try {
+            if (!this.profileManager) {
+                throw new Error('Profile manager not initialized');
+            }
+
+            const profile = this.profileManager.getProfile(profileId);
+            const profileName = profile?.name || 'Unknown';
+
+            this.profileManager.deleteProfile(profileId);
+
+            webview.postMessage({
+                type: 'success',
+                message: `Profile '${profileName}' deleted successfully`
+            });
+
+            await this.loadAndSendProfiles(webview);
+        } catch (error) {
+            webview.postMessage({
+                type: 'error',
+                message: `Failed to delete profile: ${error}`
+            });
+        }
+    }
+
+    private static async editProfile(webview: vscode.Webview, profileId: string, name: string, description: string, tags?: string[]) {
+        try {
+            if (!this.profileManager) {
+                throw new Error('Profile manager not initialized');
+            }
+
+            this.profileManager.updateProfile(profileId, { name, description, tags });
+
+            webview.postMessage({
+                type: 'success',
+                message: `Profile '${name}' updated successfully`
+            });
+
+            await this.loadAndSendProfiles(webview);
+        } catch (error) {
+            webview.postMessage({
+                type: 'error',
+                message: `Failed to update profile: ${error}`
+            });
+        }
+    }
+
+    private static async updateProfileConfigs(webview: vscode.Webview, profileId: string, configs: GitConfigItem[]) {
+        try {
+            if (!this.profileManager) {
+                throw new Error('Profile manager not initialized');
+            }
+
+            this.profileManager.updateProfile(profileId, { configs });
+
+            webview.postMessage({
+                type: 'success',
+                message: 'Profile configurations updated successfully'
+            });
+
+            await this.loadAndSendProfiles(webview);
+        } catch (error) {
+            webview.postMessage({
+                type: 'error',
+                message: `Failed to update profile configurations: ${error}`
+            });
+        }
+    }
+
+    private static async exportProfile(webview: vscode.Webview, profileId: string) {
+        try {
+            if (!this.profileManager) {
+                throw new Error('Profile manager not initialized');
+            }
+
+            const jsonData = this.profileManager.exportProfile(profileId);
+            const profile = this.profileManager.getProfile(profileId);
+
+            webview.postMessage({
+                type: 'profileExported',
+                data: {
+                    jsonData,
+                    filename: `${profile?.name.replace(/[^a-z0-9]/gi, '_')}_profile.json`
+                }
+            });
+        } catch (error) {
+            webview.postMessage({
+                type: 'error',
+                message: `Failed to export profile: ${error}`
+            });
+        }
+    }
+
+    private static async importProfile(webview: vscode.Webview, jsonData: string) {
+        try {
+            if (!this.profileManager) {
+                throw new Error('Profile manager not initialized');
+            }
+
+            const profile = this.profileManager.importProfile(jsonData);
+
+            webview.postMessage({
+                type: 'success',
+                message: `Profile '${profile.name}' imported successfully`
+            });
+
+            await this.loadAndSendProfiles(webview);
+        } catch (error) {
+            webview.postMessage({
+                type: 'error',
+                message: `Failed to import profile: ${error}`
+            });
+        }
+    }
+
     // Config History Management Methods
     private static async getConfigHistoryPath(workspaceRoot: string): Promise<string> {
         const path = require('path');
@@ -557,7 +805,7 @@ export class RepoRigMainWebviewProvider {
             font-size: var(--vscode-font-size);
             color: var(--vscode-foreground);
             background-color: var(--vscode-editor-background);
-            padding: 24px;
+            padding: 12px;
             min-height: 100vh;
         }
 
@@ -565,8 +813,8 @@ export class RepoRigMainWebviewProvider {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 32px;
-            padding-bottom: 16px;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
             border-bottom: 2px solid var(--vscode-panel-border);
         }
 
@@ -577,15 +825,15 @@ export class RepoRigMainWebviewProvider {
         }
 
         .header h1 {
-            font-size: 32px;
+            font-size: 24px;
             font-weight: 600;
             color: var(--vscode-foreground);
         }
 
         .status {
-            padding: 12px 20px;
-            border-radius: 8px;
-            font-size: 14px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -877,16 +1125,16 @@ export class RepoRigMainWebviewProvider {
         .tabs {
             display: flex;
             border-bottom: 2px solid var(--vscode-panel-border);
-            margin-bottom: 24px;
+            margin-bottom: 12px;
         }
 
         .tab {
-            padding: 16px 24px;
+            padding: 10px 16px;
             background: transparent;
             border: none;
             color: var(--vscode-descriptionForeground);
             cursor: pointer;
-            font-size: 16px;
+            font-size: 14px;
             font-weight: 500;
             border-bottom: 3px solid transparent;
             transition: all 0.2s ease;
@@ -915,10 +1163,10 @@ export class RepoRigMainWebviewProvider {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 16px;
-            border: 2px solid var(--vscode-panel-border);
-            border-radius: 8px;
-            margin-bottom: 12px;
+            padding: 10px;
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 6px;
+            margin-bottom: 8px;
             background-color: var(--vscode-editor-background);
         }
 
@@ -1349,6 +1597,315 @@ export class RepoRigMainWebviewProvider {
             color: var(--vscode-descriptionForeground);
             text-align: right;
         }
+
+        /* Profile specific styles */
+        .profiles-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 16px;
+            margin-top: 8px;
+        }
+
+        .profile-card {
+            background-color: var(--vscode-editor-background);
+            border: 2px solid var(--vscode-panel-border);
+            border-radius: 8px;
+            padding: 16px;
+            cursor: default;
+            transition: all 0.2s ease;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .profile-card:hover {
+            border-color: var(--vscode-terminal-ansiBlue);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .profile-card.active {
+            border-color: var(--vscode-terminal-ansiGreen);
+            background-color: rgba(22, 163, 74, 0.05);
+        }
+
+        .profile-card-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .profile-title-section {
+            flex: 1;
+        }
+
+        .profile-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--vscode-foreground);
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .profile-active-badge {
+            background-color: var(--vscode-terminal-ansiGreen);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .profile-description {
+            color: var(--vscode-descriptionForeground);
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        .profile-meta {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .profile-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .profile-meta-item svg {
+            flex-shrink: 0;
+            opacity: 0.8;
+        }
+
+        .profile-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+
+        .profile-tag {
+            background-color: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .profile-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--vscode-panel-border);
+        }
+
+        .profile-action-btn {
+            padding: 8px 12px;
+            border: 1px solid var(--vscode-button-border);
+            background-color: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .profile-action-btn svg {
+            flex-shrink: 0;
+        }
+
+        .profile-action-btn:hover {
+            background-color: var(--vscode-button-secondaryHoverBackground);
+        }
+
+        .profile-action-btn.apply {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+        }
+
+        .profile-action-btn.apply:hover {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+
+        .profile-action-btn.danger {
+            background-color: transparent;
+            color: var(--vscode-errorForeground);
+            border-color: var(--vscode-errorForeground);
+        }
+
+        .profile-action-btn.danger:hover {
+            background-color: var(--vscode-errorForeground);
+            color: white;
+        }
+
+        /* Modal styles */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 8px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            border-bottom: 1px solid var(--vscode-panel-border);
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 18px;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            color: var(--vscode-foreground);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+        }
+
+        .close-modal:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .modal-body {
+            padding: 16px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .modal-description {
+            color: var(--vscode-descriptionForeground);
+            margin-bottom: 16px;
+            font-size: 13px;
+        }
+
+        .modal-footer {
+            padding: 16px;
+            border-top: 1px solid var(--vscode-panel-border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .editable-cell {
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background-color 0.2s ease;
+        }
+
+        .editable-cell:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .editable-cell.editing {
+            background-color: var(--vscode-input-background);
+            padding: 0;
+        }
+
+        .editable-cell input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: var(--vscode-foreground);
+            padding: 4px 8px;
+            font-family: inherit;
+            font-size: inherit;
+        }
+
+        .editable-cell input:focus {
+            outline: 1px solid var(--vscode-focusBorder);
+        }
+
+        .config-action-btn {
+            background: none;
+            border: none;
+            color: var(--vscode-foreground);
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .config-action-btn svg {
+            flex-shrink: 0;
+        }
+
+        .config-action-btn:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .config-action-btn.delete {
+            color: var(--vscode-errorForeground);
+        }
+
+        .scope-select {
+            background-color: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .scope-select:focus {
+            outline: 1px solid var(--vscode-focusBorder);
+        }
     </style>
 </head>
 <body>
@@ -1362,6 +1919,7 @@ export class RepoRigMainWebviewProvider {
         <div class="tabs">
             <button class="tab active" data-tab="config">Git Configurations</button>
             <button class="tab" data-tab="hooks">Git Hooks</button>
+            <button class="tab" data-tab="profiles">Profiles</button>
         </div>
 
         <div id="messages"></div>
@@ -1506,6 +2064,90 @@ export class RepoRigMainWebviewProvider {
             </div>
         </div> <!-- End Hooks Tab -->
 
+        <!-- Profiles Tab Content -->
+        <div id="profiles-tab" class="tab-content">
+            <div class="controls">
+                <button id="refreshProfilesBtn" class="btn primary">Refresh Profiles</button>
+                <button id="createProfileFromCurrentBtn" class="btn">Save Current as Profile</button>
+                <button id="importProfileBtn" class="btn">Import Profile</button>
+            </div>
+
+            <div id="profilesLoadingState" class="loading" style="display: none;">
+                <div>Loading profiles...</div>
+            </div>
+
+            <div id="profilesContainer" style="display: none;">
+                <div id="profilesGrid" class="profiles-grid">
+                    <!-- Profiles will be populated here -->
+                </div>
+            </div>
+
+            <div id="profilesEmptyState" class="empty-state" style="display: none;">
+                <h3>No Profiles Found</h3>
+                <p>Create a profile to save and reuse git configurations across projects.</p>
+                <button id="createFirstProfileBtn" class="btn primary" style="margin-top: 16px;">Create Your First Profile</button>
+            </div>
+
+            <!-- Profile Creation Form -->
+            <div id="profileForm" class="form-container" style="display: none;">
+                <h3 id="profileFormTitle">Create Profile from Current Configuration</h3>
+                <div class="form-group">
+                    <label for="profileName">Profile Name *</label>
+                    <input type="text" id="profileName" placeholder="e.g., Work Profile, Personal, Client A" />
+                </div>
+                <div class="form-group">
+                    <label for="profileDescription">Description</label>
+                    <textarea id="profileDescription" placeholder="Optional description for this profile" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="profileTags">Tags (comma-separated)</label>
+                    <input type="text" id="profileTags" placeholder="e.g., work, client, personal" />
+                </div>
+                <div class="form-buttons">
+                    <button id="saveProfileBtn" class="btn primary">Create Profile</button>
+                    <button id="cancelProfileBtn" class="btn">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Profile Configs Viewer/Editor -->
+            <div id="profileConfigsModal" class="modal" style="display: none;" onclick="handleModalBackdropClick(event)">
+                <div class="modal-content" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h3 id="profileConfigsTitle">Profile Configurations</h3>
+                        <button class="close-modal" onclick="closeProfileConfigsModal()" type="button">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="modal-description">These are the git configurations saved in this profile. Click on a value to edit it.</p>
+                        <div class="modal-actions" style="margin-bottom: 12px;">
+                            <button class="btn" onclick="addConfigToProfile()" type="button">
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle; margin-right: 4px;"><path d="M8 4a.5.5 0 01.5.5v3h3a.5.5 0 010 1h-3v3a.5.5 0 01-1 0v-3h-3a.5.5 0 010-1h3v-3A.5.5 0 018 4z"/></svg>
+                                Add Configuration
+                            </button>
+                            <button class="btn primary" onclick="saveProfileConfigs()" id="saveProfileConfigsBtn" style="display: none;" type="button">Save Changes</button>
+                        </div>
+                        <div class="config-table-container">
+                            <table class="config-table">
+                                <thead>
+                                    <tr>
+                                        <th>Configuration Key</th>
+                                        <th>Value</th>
+                                        <th>Scope</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="profileConfigsTableBody">
+                                    <!-- Profile configs will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn" onclick="closeProfileConfigsModal()" type="button">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div> <!-- End Profiles Tab -->
+
     <script>
         const vscode = acquireVsCodeApi();
         let configs = [];
@@ -1541,6 +2183,23 @@ export class RepoRigMainWebviewProvider {
         const hookTemplates = document.getElementById('hookTemplates');
         const templatesContainer = document.getElementById('templatesContainer');
 
+        // DOM Elements - Profiles Tab
+        const refreshProfilesBtn = document.getElementById('refreshProfilesBtn');
+        const createProfileFromCurrentBtn = document.getElementById('createProfileFromCurrentBtn');
+        const importProfileBtn = document.getElementById('importProfileBtn');
+        const profilesLoadingState = document.getElementById('profilesLoadingState');
+        const profilesContainer = document.getElementById('profilesContainer');
+        const profilesEmptyState = document.getElementById('profilesEmptyState');
+        const profilesGrid = document.getElementById('profilesGrid');
+        const createFirstProfileBtn = document.getElementById('createFirstProfileBtn');
+        const profileForm = document.getElementById('profileForm');
+        const profileFormTitle = document.getElementById('profileFormTitle');
+        const profileNameInput = document.getElementById('profileName');
+        const profileDescriptionInput = document.getElementById('profileDescription');
+        const profileTagsInput = document.getElementById('profileTags');
+        const saveProfileBtn = document.getElementById('saveProfileBtn');
+        const cancelProfileBtn = document.getElementById('cancelProfileBtn');
+
         // Tab navigation
         const tabs = document.querySelectorAll('.tab');
         const tabContents = document.querySelectorAll('.tab-content');
@@ -1550,6 +2209,13 @@ export class RepoRigMainWebviewProvider {
         let currentEditingHook = null;
         let availableTemplates = [];
         const cancelConfigBtn = document.getElementById('cancelConfigBtn');
+
+        // Profile management variables
+        let profiles = [];
+        let activeProfileId = null;
+        let editingProfileId = null;
+        let currentEditingProfile = null;
+        let profileConfigsModified = false;
 
         // Event Listeners
         refreshBtn.addEventListener('click', () => {
@@ -1640,12 +2306,83 @@ export class RepoRigMainWebviewProvider {
             hideHookEditor();
         });
 
+        // Profile Event Listeners
+        refreshProfilesBtn.addEventListener('click', () => {
+            vscode.postMessage({ type: 'loadProfiles' });
+            showProfilesLoading();
+        });
+
+        createProfileFromCurrentBtn.addEventListener('click', () => {
+            showProfileForm();
+        });
+
+        createFirstProfileBtn.addEventListener('click', () => {
+            showProfileForm();
+        });
+
+        saveProfileBtn.addEventListener('click', () => {
+            const name = profileNameInput.value.trim();
+            if (!name) {
+                showMessage('Profile name is required', 'error');
+                return;
+            }
+
+            const description = profileDescriptionInput.value.trim();
+            const tags = profileTagsInput.value.trim();
+            const tagsArray = tags ? tags.split(',').map(t => t.trim()).filter(t => t) : [];
+
+            if (editingProfileId) {
+                // Edit existing profile
+                vscode.postMessage({
+                    type: 'editProfile',
+                    profileId: editingProfileId,
+                    name,
+                    description,
+                    tags: tagsArray
+                });
+            } else {
+                // Create new profile
+                vscode.postMessage({
+                    type: 'createProfileFromCurrent',
+                    name,
+                    description,
+                    tags: tagsArray
+                });
+            }
+
+            hideProfileForm();
+        });
+
+        cancelProfileBtn.addEventListener('click', () => {
+            hideProfileForm();
+        });
+
+        importProfileBtn.addEventListener('click', () => {
+            const jsonData = window.prompt('Paste the profile JSON data:');
+            if (!jsonData) return;
+
+            vscode.postMessage({
+                type: 'importProfile',
+                jsonData
+            });
+        });
+
         // Tab switching
         tabs.forEach(tab => {
             tab.addEventListener('click', () => {
                 const targetTab = tab.dataset.tab;
                 switchTab(targetTab);
             });
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                const modal = document.getElementById('profileConfigsModal');
+                if (modal && modal.style.display === 'flex') {
+                    closeProfileConfigsModal();
+                }
+            }
         });
 
         // Message handler
@@ -1672,6 +2409,13 @@ export class RepoRigMainWebviewProvider {
                     break;
                 case 'hookTemplates':
                     handleHookTemplates(message.data);
+                    break;
+                case 'profiles':
+                    handleProfilesData(message.data);
+                    break;
+                case 'profileExported':
+                    downloadProfileJSON(message.data.jsonData, message.data.filename);
+                    showMessage('Profile exported successfully', 'success');
                     break;
             }
         });
@@ -1857,6 +2601,9 @@ export class RepoRigMainWebviewProvider {
             // Load data for the active tab
             if (tabName === 'hooks') {
                 vscode.postMessage({ type: 'loadHooks' });
+            } else if (tabName === 'profiles') {
+                hideProfileForm();
+                vscode.postMessage({ type: 'loadProfiles' });
             }
         }
 
@@ -2015,6 +2762,305 @@ export class RepoRigMainWebviewProvider {
             hooksLoadingState.style.display = 'none';
         }
 
+        // Profile Functions
+        function handleProfilesData(data) {
+            profiles = data.profiles;
+            activeProfileId = data.activeProfileId;
+            renderProfiles();
+            hideProfilesLoading();
+        }
+
+        function renderProfiles() {
+            profileForm.style.display = 'none';
+            
+            if (profiles.length === 0) {
+                profilesContainer.style.display = 'none';
+                profilesEmptyState.style.display = 'block';
+                return;
+            }
+
+            profilesContainer.style.display = 'block';
+            profilesEmptyState.style.display = 'none';
+
+            profilesGrid.innerHTML = profiles.map(profile => {
+                const isActive = profile.id === activeProfileId;
+                const tagsHtml = profile.tags && profile.tags.length > 0 
+                    ? \`<div class="profile-tags">\${profile.tags.map(tag => 
+                        \`<span class="profile-tag">\${escapeHtml(tag)}</span>\`
+                    ).join('')}</div>\` 
+                    : '';
+
+                const createdDate = new Date(profile.created).toLocaleDateString();
+                const configCount = profile.configs.length;
+
+                return \`
+                    <div class="profile-card \${isActive ? 'active' : ''}">
+                        <div class="profile-card-header">
+                            <div class="profile-title-section">
+                                <div class="profile-name">
+                                    \${escapeHtml(profile.name)}
+                                    \${isActive ? '<span class="profile-active-badge">Active</span>' : ''}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="profile-description">
+                            \${escapeHtml(profile.description || 'No description provided')}
+                        </div>
+                        <div class="profile-meta">
+                            <div class="profile-meta-item">
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 3.25a2.25 2.25 0 114.5 0 2.25 2.25 0 01-4.5 0zM3.75 2a1.25 1.25 0 100 2.5 1.25 1.25 0 000-2.5z"/><path fill-rule="evenodd" d="M0 13.25a3.25 3.25 0 013.25-3.25h1a3.25 3.25 0 013.25 3.25v1.5a.5.5 0 01-1 0v-1.5A2.25 2.25 0 004.25 11h-1A2.25 2.25 0 001 13.25v1.5a.5.5 0 01-1 0v-1.5z"/><path fill-rule="evenodd" d="M12 5.5V3.5h-2V2h2V0h1.5v2H16v1.5h-2.5v2H12zM5 8.5h4.5v1.5H5V8.5z"/></svg>
+                                <span>\${configCount} config\${configCount !== 1 ? 's' : ''}</span>
+                            </div>
+                            <div class="profile-meta-item">
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 0a.5.5 0 01.5.5V1h6V.5a.5.5 0 011 0V1h1a2 2 0 012 2v11a2 2 0 01-2 2H3a2 2 0 01-2-2V3a2 2 0 012-2h1V.5a.5.5 0 01.5-.5zM3 2a1 1 0 00-1 1v1h12V3a1 1 0 00-1-1H3zm11 3H2v9a1 1 0 001 1h10a1 1 0 001-1V5z"/></svg>
+                                <span>\${createdDate}</span>
+                            </div>
+                        </div>
+                        \${tagsHtml}
+                        <div class="profile-actions">
+                            <button class="profile-action-btn apply" onclick="applyProfile('\${profile.id}')" style="grid-column: span 2;">
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+                                Apply Profile
+                            </button>
+                            <button class="profile-action-btn" onclick="viewProfileConfigs('\${profile.id}')">
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 9.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/><path fill-rule="evenodd" d="M8 1a7 7 0 100 14A7 7 0 008 1zM2 8a6 6 0 1112 0A6 6 0 012 8z"/></svg>
+                                View
+                            </button>
+                            <button class="profile-action-btn" onclick="editProfile('\${profile.id}')">
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 012.474 0l1.086 1.086a1.75 1.75 0 010 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 01-.927-.928l.929-3.25a1.75 1.75 0 01.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 00-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 000-.354l-1.086-1.086zM11.189 6.25L9.75 4.81l-6.286 6.287a.25.25 0 00-.064.108l-.558 1.953 1.953-.558a.249.249 0 00.108-.064l6.286-6.286z"/></svg>
+                                Edit
+                            </button>
+                            <button class="profile-action-btn" onclick="exportProfile('\${profile.id}')">
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8.636 3.5a.5.5 0 00-.5-.5H1.5A1.5 1.5 0 000 4.5v10A1.5 1.5 0 001.5 16h10a1.5 1.5 0 001.5-1.5V7.864a.5.5 0 00-1 0V14.5a.5.5 0 01-.5.5h-10a.5.5 0 01-.5-.5v-10a.5.5 0 01.5-.5h6.636a.5.5 0 00.5-.5z"/><path d="M16 .5a.5.5 0 00-.5-.5h-5a.5.5 0 000 1h3.793L6.146 9.146a.5.5 0 10.708.708L15 1.707V5.5a.5.5 0 001 0v-5z"/></svg>
+                                Export
+                            </button>
+                            <button class="profile-action-btn danger" onclick="deleteProfile('\${profile.id}')">
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 016 6v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm2.5 0a.5.5 0 01.5.5v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm3 .5a.5.5 0 00-1 0v6a.5.5 0 001 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 01-1 1H13v9a2 2 0 01-2 2H5a2 2 0 01-2-2V4h-.5a1 1 0 01-1-1V2a1 1 0 011-1H6a1 1 0 011-1h2a1 1 0 011 1h3.5a1 1 0 011 1v1zM4.118 4L4 4.059V13a1 1 0 001 1h6a1 1 0 001-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                \`;
+            }).join('');
+        }
+
+        function applyProfile(profileId) {
+            if (confirm('Apply this profile? This will update your git configurations.')) {
+                vscode.postMessage({
+                    type: 'applyProfile',
+                    profileId
+                });
+            }
+        }
+
+        function editProfile(profileId) {
+            const profile = profiles.find(p => p.id === profileId);
+            if (!profile) return;
+
+            editingProfileId = profileId;
+            profileFormTitle.textContent = 'Edit Profile';
+            profileNameInput.value = profile.name;
+            profileDescriptionInput.value = profile.description || '';
+            profileTagsInput.value = profile.tags ? profile.tags.join(', ') : '';
+            saveProfileBtn.textContent = 'Update Profile';
+            
+            // Hide profile cards and empty state, show form
+            profilesContainer.style.display = 'none';
+            profilesEmptyState.style.display = 'none';
+            profileForm.style.display = 'block';
+            profileNameInput.focus();
+        }
+
+        function exportProfile(profileId) {
+            vscode.postMessage({
+                type: 'exportProfile',
+                profileId
+            });
+        }
+
+        function deleteProfile(profileId) {
+            const profile = profiles.find(p => p.id === profileId);
+            if (confirm(\`Are you sure you want to delete the profile "\${profile?.name}"?\`)) {
+                vscode.postMessage({
+                    type: 'deleteProfile',
+                    profileId
+                });
+            }
+        }
+
+        function viewProfileConfigs(profileId) {
+            const profile = profiles.find(p => p.id === profileId);
+            if (!profile) return;
+
+            currentEditingProfile = JSON.parse(JSON.stringify(profile)); // Deep copy
+            profileConfigsModified = false;
+
+            const modal = document.getElementById('profileConfigsModal');
+            const title = document.getElementById('profileConfigsTitle');
+            const tbody = document.getElementById('profileConfigsTableBody');
+            const saveBtn = document.getElementById('saveProfileConfigsBtn');
+
+            title.textContent = \`Configurations in "\${profile.name}"\`;
+            saveBtn.style.display = 'none';
+
+            renderProfileConfigsTable();
+            modal.style.display = 'flex';
+        }
+
+        function renderProfileConfigsTable() {
+            const tbody = document.getElementById('profileConfigsTableBody');
+            
+            tbody.innerHTML = currentEditingProfile.configs.map((config, index) => \`
+                <tr>
+                    <td class="config-key">\${escapeHtml(config.key)}</td>
+                    <td class="editable-cell" onclick="editConfigValue(\${index})" id="value-\${index}">
+                        \${escapeHtml(config.value)}
+                    </td>
+                    <td>
+                        <select onchange="updateConfigScope(\${index}, this.value)" class="scope-select">
+                            <option value="local" \${config.scope === 'local' ? 'selected' : ''}>local</option>
+                            <option value="global" \${config.scope === 'global' ? 'selected' : ''}>global</option>
+                        </select>
+                    </td>
+                    <td>
+                        <button class="config-action-btn delete" onclick="removeConfigFromProfile(\${index})">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 016 6v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm2.5 0a.5.5 0 01.5.5v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm3 .5a.5.5 0 00-1 0v6a.5.5 0 001 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 01-1 1H13v9a2 2 0 01-2 2H5a2 2 0 01-2-2V4h-.5a1 1 0 01-1-1V2a1 1 0 011-1H6a1 1 0 011-1h2a1 1 0 011 1h3.5a1 1 0 011 1v1zM4.118 4L4 4.059V13a1 1 0 001 1h6a1 1 0 001-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
+                            Remove
+                        </button>
+                    </td>
+                </tr>
+            \`).join('');
+        }
+
+        function editConfigValue(index) {
+            const cell = document.getElementById(\`value-\${index}\`);
+            const currentValue = currentEditingProfile.configs[index].value;
+            
+            cell.classList.add('editing');
+            cell.innerHTML = \`<input type="text" value="\${escapeHtml(currentValue)}" 
+                onblur="saveConfigValue(\${index}, this.value)" 
+                onkeydown="if(event.key==='Enter') this.blur()" 
+                autofocus />\`;
+            
+            const input = cell.querySelector('input');
+            input.focus();
+            input.select();
+        }
+
+        function saveConfigValue(index, newValue) {
+            currentEditingProfile.configs[index].value = newValue;
+            profileConfigsModified = true;
+            document.getElementById('saveProfileConfigsBtn').style.display = 'inline-block';
+            renderProfileConfigsTable();
+        }
+
+        function updateConfigScope(index, newScope) {
+            currentEditingProfile.configs[index].scope = newScope;
+            profileConfigsModified = true;
+            document.getElementById('saveProfileConfigsBtn').style.display = 'inline-block';
+        }
+
+        function removeConfigFromProfile(index) {
+            if (confirm('Remove this configuration from the profile?')) {
+                currentEditingProfile.configs.splice(index, 1);
+                profileConfigsModified = true;
+                document.getElementById('saveProfileConfigsBtn').style.display = 'inline-block';
+                renderProfileConfigsTable();
+            }
+        }
+
+        function addConfigToProfile() {
+            const key = window.prompt('Enter configuration key (e.g., user.name):');
+            if (!key) return;
+
+            const value = window.prompt('Enter configuration value:');
+            if (value === null) return;
+
+            const scope = confirm('Add as local config? (Cancel for global)') ? 'local' : 'global';
+
+            currentEditingProfile.configs.push({ key, value, scope });
+            profileConfigsModified = true;
+            document.getElementById('saveProfileConfigsBtn').style.display = 'inline-block';
+            renderProfileConfigsTable();
+        }
+
+        function saveProfileConfigs() {
+            if (!profileConfigsModified) {
+                showMessage('No changes to save', 'error');
+                return;
+            }
+
+            vscode.postMessage({
+                type: 'updateProfileConfigs',
+                profileId: currentEditingProfile.id,
+                configs: currentEditingProfile.configs
+            });
+
+            closeProfileConfigsModal();
+        }
+
+        function closeProfileConfigsModal() {
+            if (profileConfigsModified && !confirm('You have unsaved changes. Close anyway?')) {
+                return;
+            }
+            const modal = document.getElementById('profileConfigsModal');
+            modal.style.display = 'none';
+            currentEditingProfile = null;
+            profileConfigsModified = false;
+            document.getElementById('saveProfileConfigsBtn').style.display = 'none';
+        }
+
+        function handleModalBackdropClick(event) {
+            // Close modal if clicking on the backdrop (not the content)
+            if (event.target.id === 'profileConfigsModal') {
+                closeProfileConfigsModal();
+            }
+        }
+
+        function downloadProfileJSON(jsonData, filename) {
+            // Display the JSON in a way that user can copy it
+            const message = \`Profile exported successfully! Copy this JSON:\\n\\n\${jsonData}\`;
+            alert(message);
+        }
+
+        function showProfilesLoading() {
+            profileForm.style.display = 'none';
+            profilesLoadingState.style.display = 'block';
+            profilesContainer.style.display = 'none';
+            profilesEmptyState.style.display = 'none';
+        }
+
+        function hideProfilesLoading() {
+            profilesLoadingState.style.display = 'none';
+        }
+
+        function showProfileForm() {
+            editingProfileId = null;
+            profileFormTitle.textContent = 'Create Profile from Current Configuration';
+            profileNameInput.value = '';
+            profileDescriptionInput.value = '';
+            profileTagsInput.value = '';
+            saveProfileBtn.textContent = 'Create Profile';
+            
+            // Hide profile cards and empty state, show form
+            profilesContainer.style.display = 'none';
+            profilesEmptyState.style.display = 'none';
+            profileForm.style.display = 'block';
+            profileNameInput.focus();
+        }
+
+        function hideProfileForm() {
+            editingProfileId = null;
+            profileForm.style.display = 'none';
+            profileNameInput.value = '';
+            profileDescriptionInput.value = '';
+            profileTagsInput.value = '';
+            saveProfileBtn.textContent = 'Create Profile';
+            
+            // Re-render profiles to show cards again
+            renderProfiles();
+        }
+
         // Make functions globally available
         window.editConfig = editConfig;
         window.deleteConfig = deleteConfig;
@@ -2022,6 +3068,19 @@ export class RepoRigMainWebviewProvider {
         window.editHook = editHook;
         window.deleteHook = deleteHook;
         window.useTemplate = useTemplate;
+        window.applyProfile = applyProfile;
+        window.editProfile = editProfile;
+        window.exportProfile = exportProfile;
+        window.deleteProfile = deleteProfile;
+        window.viewProfileConfigs = viewProfileConfigs;
+        window.closeProfileConfigsModal = closeProfileConfigsModal;
+        window.editConfigValue = editConfigValue;
+        window.saveConfigValue = saveConfigValue;
+        window.updateConfigScope = updateConfigScope;
+        window.removeConfigFromProfile = removeConfigFromProfile;
+        window.addConfigToProfile = addConfigToProfile;
+        window.saveProfileConfigs = saveProfileConfigs;
+        window.handleModalBackdropClick = handleModalBackdropClick;
 
         // Initial load
         vscode.postMessage({ type: 'loadConfigs' });
