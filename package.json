@@ -2,7 +2,7 @@
   "name": "reporig",
   "displayName": "Repo Rig",
   "description": "Rig up your repository configurations with ease - manage git settings, git hooks, detect repositories, and edit configurations directly in VS Code",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "publisher": "thechandanbhagat",
   "icon": "media/icon.png",
   "repository": {
