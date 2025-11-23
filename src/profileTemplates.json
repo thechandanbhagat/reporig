@@ -1,0 +1,174 @@
+{
+  "templates": [
+    {
+      "id": "work-profile",
+      "name": "Work Profile",
+      "description": "Professional work environment with company email and settings",
+      "tags": ["work", "office", "professional"],
+      "icon": "briefcase",
+      "configs": [
+        {
+          "key": "user.name",
+          "value": "Your Name",
+          "scope": "local"
+        },
+        {
+          "key": "user.email",
+          "value": "yourname@company.com",
+          "scope": "local"
+        },
+        {
+          "key": "commit.gpgsign",
+          "value": "true",
+          "scope": "local"
+        },
+        {
+          "key": "core.autocrlf",
+          "value": "true",
+          "scope": "local"
+        },
+        {
+          "key": "pull.rebase",
+          "value": "true",
+          "scope": "local"
+        }
+      ]
+    },
+    {
+      "id": "personal-profile",
+      "name": "Personal Profile",
+      "description": "Personal projects with private email and relaxed settings",
+      "tags": ["personal", "home", "hobby"],
+      "icon": "home",
+      "configs": [
+        {
+          "key": "user.name",
+          "value": "Your Name",
+          "scope": "local"
+        },
+        {
+          "key": "user.email",
+          "value": "yourname@personal.com",
+          "scope": "local"
+        },
+        {
+          "key": "commit.gpgsign",
+          "value": "false",
+          "scope": "local"
+        },
+        {
+          "key": "core.autocrlf",
+          "value": "input",
+          "scope": "local"
+        }
+      ]
+    },
+    {
+      "id": "opensource-profile",
+      "name": "Open Source Profile",
+      "description": "Contributing to open source projects with public email",
+      "tags": ["opensource", "oss", "community"],
+      "icon": "github",
+      "configs": [
+        {
+          "key": "user.name",
+          "value": "Your Name",
+          "scope": "local"
+        },
+        {
+          "key": "user.email",
+          "value": "yourname@users.noreply.github.com",
+          "scope": "local"
+        },
+        {
+          "key": "commit.gpgsign",
+          "value": "true",
+          "scope": "local"
+        },
+        {
+          "key": "pull.rebase",
+          "value": "true",
+          "scope": "local"
+        },
+        {
+          "key": "push.default",
+          "value": "current",
+          "scope": "local"
+        }
+      ]
+    },
+    {
+      "id": "client-profile",
+      "name": "Client Project Profile",
+      "description": "Client work with specific email and billing requirements",
+      "tags": ["client", "contract", "freelance"],
+      "icon": "organization",
+      "configs": [
+        {
+          "key": "user.name",
+          "value": "Your Name",
+          "scope": "local"
+        },
+        {
+          "key": "user.email",
+          "value": "yourname@client.com",
+          "scope": "local"
+        },
+        {
+          "key": "commit.gpgsign",
+          "value": "true",
+          "scope": "local"
+        },
+        {
+          "key": "core.autocrlf",
+          "value": "true",
+          "scope": "local"
+        },
+        {
+          "key": "push.default",
+          "value": "simple",
+          "scope": "local"
+        }
+      ]
+    },
+    {
+      "id": "team-standard",
+      "name": "Team Standard Profile",
+      "description": "Standardized settings for team collaboration",
+      "tags": ["team", "standard", "collaboration"],
+      "icon": "organization",
+      "configs": [
+        {
+          "key": "core.autocrlf",
+          "value": "true",
+          "scope": "local"
+        },
+        {
+          "key": "core.eol",
+          "value": "lf",
+          "scope": "local"
+        },
+        {
+          "key": "pull.rebase",
+          "value": "true",
+          "scope": "local"
+        },
+        {
+          "key": "push.default",
+          "value": "current",
+          "scope": "local"
+        },
+        {
+          "key": "init.defaultBranch",
+          "value": "main",
+          "scope": "local"
+        },
+        {
+          "key": "fetch.prune",
+          "value": "true",
+          "scope": "local"
+        }
+      ]
+    }
+  ]
+}
